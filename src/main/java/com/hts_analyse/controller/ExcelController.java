@@ -6,14 +6,17 @@ import com.hts_analyse.service.CityLoaderService;
 import com.hts_analyse.service.ExcelImportService;
 import com.hts_analyse.service.ExcelReaderService;
 import com.hts_analyse.service.SimpleAddressParser;
+import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import org.springframework.web.multipart.MultipartFile;
 
 @Slf4j
 @RestController
@@ -57,6 +60,12 @@ public class ExcelController {
     @PostMapping("/record")
     public ResponseEntity<String> recordExcel(@RequestParam String filePath) {
         excelImportService.importExcel(filePath);
+        return ResponseEntity.ok("success");
+    }
+
+    @PostMapping(value = "/read-and-save-excel", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<String> recordExcel(@RequestPart("file") MultipartFile file) throws IOException {
+        excelImportService.importExcel(file); // artık dosyanın içeriğini gönderiyoruz
         return ResponseEntity.ok("success");
     }
 
