@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.4.xsd">
+
+  <changeSet id="01-create-hts-record" author="ersin">
+    <createTable tableName="hts_record">
+      <column name="id" type="BIGSERIAL">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+
+      <column name="gsm_number" type="VARCHAR(20)"/>
+      <column name="record_type" type="VARCHAR(100)"/>
+      <column name="other_number" type="VARCHAR(20)"/>
+      <column name="record_time" type="TIMESTAMP"/>
+      <column name="full_name" type="VARCHAR(255)"/>
+
+      <!-- Base station info -->
+      <column name="base_station_id" type="VARCHAR(50)"/>
+      <column name="operator" type="VARCHAR(100)"/>
+      <column name="address" type="TEXT"/>
+
+      <!-- Analysis results -->
+      <column name="city" type="VARCHAR(100)"/>
+      <column name="district" type="VARCHAR(100)"/>
+      <column name="latitude" type="DOUBLE PRECISION"/>
+      <column name="longitude" type="DOUBLE PRECISION"/>
+    </createTable>
+  </changeSet>
+
+  <changeSet id="02-create-base-station-info" author="ersin">
+    <createTable tableName="base_station_info">
+      <column name="id" type="BIGSERIAL">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="base_station_id" type="VARCHAR(50)">
+        <constraints nullable="false" unique="true"/>
+      </column>
+      <column name="address" type="TEXT"/>
+      <column name="city" type="VARCHAR(100)"/>
+      <column name="district" type="VARCHAR(100)"/>
+      <column name="latitude" type="DOUBLE PRECISION"/>
+      <column name="longitude" type="DOUBLE PRECISION"/>
+    </createTable>
+  </changeSet>
+
+  <changeSet id="003-add-record-time-index" author="ersin">
+    <comment>Index on record_time column of hts_record</comment>
+    <createIndex indexName="idx_hts_record_record_time"
+      tableName="hts_record">
+      <column name="record_time"/>
+    </createIndex>
+  </changeSet>
+
+</databaseChangeLog>
