@@ -1,0 +1,32 @@
+server:
+  port: 8099
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    open-in-view: false
+
+hts:
+  analyse:
+    interval-minutes: 5
+
+city:
+  csv:
+    path: /Users/ersingureli/Desktop/tasklar ve dokumanlar/hts/il_ilce.csv
+
+google:
+  api:
+    key: AIzaSyAt1030aAjVH_n00H-5RKap5vLM0iTUL7o
+
+geoapify:
+  api:
+    key: 55efb1688fbe40da880033bd7694ff71
