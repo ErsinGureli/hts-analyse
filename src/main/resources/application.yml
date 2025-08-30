@@ -33,4 +33,4 @@ geoapify:
 
 hts:
   analyse:
-    interval-minutes: 5
+    interval-minutes: 10

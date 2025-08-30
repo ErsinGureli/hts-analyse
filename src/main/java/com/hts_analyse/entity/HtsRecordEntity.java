@@ -32,7 +32,6 @@ public class HtsRecordEntity {
     @Column(name = "full_name")
     private String fullName;
 
-    // Base station info
     @Column(name = "base_station_id")
     private String baseStationId;
 
@@ -42,7 +41,6 @@ public class HtsRecordEntity {
     @Column(name = "address")
     private String address;
 
-    // Analysis results
     @Column(name = "city")
     private String city;
 
@@ -54,4 +52,10 @@ public class HtsRecordEntity {
 
     @Column(name = "longitude")
     private Double longitude;
+
+    @Column(name = "identity_no", length = 100)
+    private String identityNo;
+
+    @Column(name = "imei", length = 50)
+    private String imei;
 }

@@ -1,4 +1,4 @@
-package com.hts_analyse.model;
+package com.hts_analyse.model.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

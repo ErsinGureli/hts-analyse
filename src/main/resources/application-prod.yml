@@ -21,7 +21,7 @@ spring:
 
 hts:
   analyse:
-    interval-minutes: 5
+    interval-minutes: 10
 
 city:
   csv:

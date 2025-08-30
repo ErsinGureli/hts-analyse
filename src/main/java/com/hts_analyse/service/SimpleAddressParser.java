@@ -2,7 +2,7 @@ package com.hts_analyse.service;
 
 import static com.hts_analyse.util.TurkishCharacterConverter.turkishToAscii;
 
-import com.hts_analyse.model.CityDistrict;
+import com.hts_analyse.model.dto.CityDistrict;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;

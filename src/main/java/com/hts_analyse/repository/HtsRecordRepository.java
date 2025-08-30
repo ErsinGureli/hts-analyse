@@ -10,7 +10,14 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface HtsRecordRepository extends JpaRepository<HtsRecordEntity, Long> {
-    List<HtsRecordEntity> findAllByGsmNumber(String string);
+
+    List<HtsRecordEntity> findAllByGsmNumber(String gsmNumber);
+
+    List<HtsRecordEntity> findAllByGsmNumberAndRecordDatetimeBetween(String gsmNumber, LocalDateTime start, LocalDateTime end);
+
+    List<HtsRecordEntity> findAllByGsmNumberAndRecordDatetimeAfter(String gsmNumber, LocalDateTime start);
+
+    List<HtsRecordEntity> findAllByGsmNumberAndRecordDatetimeBefore(String gsmNumber, LocalDateTime end);
 
     @Query(value = """
     SELECT *
@@ -26,5 +33,38 @@ public interface HtsRecordRepository extends JpaRepository<HtsRecordEntity, Long
             @Param("baseLat") double baseLat,
             @Param("baseLng") double baseLng,
             @Param("distance") double distance
+    );
+
+    @Query(value = """
+
+        WITH base AS (
+           SELECT
+               TRIM(regexp_replace(full_name, '.*\\s+', '')) AS last_name, \s
+               full_name
+           FROM hts_record
+           WHERE gsm_number = :gsmNumber
+       )
+       SELECT
+           last_name,
+           COUNT(*)                AS call_count,
+           COUNT(DISTINCT full_name) AS person_count
+       FROM base
+       WHERE last_name <> '' AND last_name IS NOT NULL
+       GROUP BY last_name
+       ORDER BY person_count DESC;
+       """, nativeQuery = true)
+    List<Object[]> findLastNamesWithCount(@Param("gsmNumber") String gsmNumber);
+
+    @Query(value = """
+        SELECT full_name, identity_no, COUNT(*) AS count
+        FROM hts_record
+        WHERE gsm_number = :gsmNumber
+          AND full_name LIKE CONCAT('%', :lastName)
+        GROUP BY full_name, identity_no
+        ORDER BY count DESC
+        """, nativeQuery = true)
+    List<Object[]> findFullNameIdentityNoWithCount(
+            @Param("gsmNumber") String gsmNumber,
+            @Param("lastName") String lastName
     );
 }

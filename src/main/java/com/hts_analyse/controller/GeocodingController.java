@@ -1,6 +1,6 @@
 package com.hts_analyse.controller;
 
-import com.hts_analyse.model.GeocodingResult;
+import com.hts_analyse.model.dto.GeocodingResult;
 import com.hts_analyse.service.GeocodingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;

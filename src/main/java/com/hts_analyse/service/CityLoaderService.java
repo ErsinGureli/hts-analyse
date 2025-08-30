@@ -1,7 +1,5 @@
 package com.hts_analyse.service;
 
-import com.hts_analyse.util.CityLoader;
-import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,10 +18,4 @@ public class CityLoaderService {
 
     private Map<String, Set<String>> cityMap;
 
-    @PostConstruct
-    public void init() {
-        log.info("Loading city map from CSV: {}", csvDosyaYolu);
-        this.cityMap = CityLoader.loadCityMap(csvDosyaYolu);
-        log.info("City map loaded. Total cities: {}", cityMap.size());
-    }
 }

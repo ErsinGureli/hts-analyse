@@ -1,4 +1,4 @@
-package com.hts_analyse.model;
+package com.hts_analyse.model.dto;
 
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
@@ -18,5 +18,7 @@ public class HtsAnalyseDto {
     private LocalDateTime baseGsmDateTime;
     private LocalDateTime otherGsmDateTime;
     private Double distance;
+    private String baseStationId;
+    private String otherStationId;
 
 }

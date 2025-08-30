@@ -1,11 +1,12 @@
 package com.hts_analyse.service;
 
-import com.hts_analyse.model.Location;
+import com.hts_analyse.model.dto.Location;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,14 +23,9 @@ public class GeoapifyGeocoderService {
     @Value("${geoapify.api.key}")
     private String apiKey;
 
-    private final WebClient webClient = WebClient.builder()
-            .baseUrl("https://api.geoapify.com")
-            .defaultHeader("Accept", "application/json")
-            .build();
-
     public Location geocode(String address) {
         try {
-            String encodedAddress = URLEncoder.encode(address, "UTF-8");
+            String encodedAddress = URLEncoder.encode(address, StandardCharsets.UTF_8);
             String urlStr = "https://api.geoapify.com/v1/geocode/search?text=" + encodedAddress
                     + "&format=json&apiKey=" + apiKey;
             Thread.sleep(1000);

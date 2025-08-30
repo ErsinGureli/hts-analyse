@@ -3,13 +3,12 @@ package com.hts_analyse.service;
 import com.hts_analyse.cache.BaseStationInfoCache;
 import com.hts_analyse.entity.BaseStationInfoEntity;
 import com.hts_analyse.entity.HtsRecordEntity;
-import com.hts_analyse.model.ExcelRecord;
-import com.hts_analyse.model.GeocodingResult;
-import com.hts_analyse.model.Location;
+import com.hts_analyse.model.dto.ExcelRecord;
+import com.hts_analyse.model.dto.GeocodingResult;
+import com.hts_analyse.model.dto.Location;
 import com.hts_analyse.repository.BaseStationInfoRepository;
 import com.hts_analyse.repository.HtsRecordRepository;
 import com.hts_analyse.util.DateUtil;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
@@ -21,7 +20,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 @Slf4j
 @Service
@@ -39,41 +37,46 @@ public class ExcelImportService {
     @Value("${hts.analyse.interval-minutes}")
     private int intervalMinutes;
 
-    public void importExcel(String filePath) {
-        List<ExcelRecord> excelRecords = filterUniquePerNDuration(excelReaderService.readExcel(filePath));
+    public void importExcel(String filePath, boolean shouldAnalyseHts, boolean shouldFilterHtsRecords ) {
+        List<ExcelRecord> excelRecords = excelReaderService.readExcel(filePath);
+        List<ExcelRecord> filteredExcelRecords = shouldFilterHtsRecords ? filterUniquePerNDuration(excelReaderService.readExcel(filePath)) : excelRecords;
 
         AtomicInteger geoLocationApiUsage = new AtomicInteger();
 
-        for (ExcelRecord excelRecord : excelRecords) {
+        for (ExcelRecord excelRecord : filteredExcelRecords) {
             try {
                 if (StringUtils.isBlank(excelRecord.getBaseStation().getAddress())) {
                     continue;
                 }
 
                 String baseStationId = excelRecord.getBaseStation().getBaseStationId();
-                BaseStationInfoEntity stationInfo = baseStationInfoCache.getBaseStationMap()
-                        .computeIfAbsent(baseStationId, id -> {
-                            GeocodingResult g = geocodingService.geocode(excelRecord.getBaseStation().getAddress());
-                            if (g == null) {
-                                return null;
-                            }
-                            geoLocationApiUsage.getAndIncrement();
+                BaseStationInfoEntity stationInfo = null;
 
-                            BaseStationInfoEntity entity = BaseStationInfoEntity.builder()
-                                    .baseStationId(id)
-                                    .address(excelRecord.getBaseStation().getAddress())
-                                    .city(g.getCity())
-                                    .district(g.getDistrict())
-                                    .latitude(g.getLatitude())
-                                    .longitude(g.getLongitude())
-                                    .build();
+                if(shouldAnalyseHts) {
+                    stationInfo = baseStationInfoCache.getBaseStationMap()
+                            .computeIfAbsent(baseStationId, id -> {
+                                GeocodingResult g = geocodingService.geocode(excelRecord.getBaseStation().getAddress());
+                                if (g == null) {
+                                    return null;
+                                }
+                                geoLocationApiUsage.getAndIncrement();
 
-                            baseStationInfoRepository.save(entity);
-                            return entity;
-                        });
+                                BaseStationInfoEntity entity = BaseStationInfoEntity.builder()
+                                        .baseStationId(id)
+                                        .address(excelRecord.getBaseStation().getAddress())
+                                        .city(g.getCity())
+                                        .district(g.getDistrict())
+                                        .latitude(g.getLatitude())
+                                        .longitude(g.getLongitude())
+                                        .build();
 
-                if (stationInfo == null) {
-                    continue;
+                                baseStationInfoRepository.save(entity);
+                                return entity;
+                            });
+
+                    if (stationInfo == null) {
+                        continue;
+                    }
                 }
 
                 HtsRecordEntity hts = HtsRecordEntity.builder()
@@ -84,80 +87,21 @@ public class ExcelImportService {
                         .fullName(excelRecord.getFullName())
                         .baseStationId(baseStationId)
                         .operator(excelRecord.getBaseStation().getOperator())
-                        .address(stationInfo.getAddress())
-                        .city(stationInfo.getCity())
-                        .district(stationInfo.getDistrict())
-                        .latitude(stationInfo.getLatitude())
-                        .longitude(stationInfo.getLongitude())
+                        .address(stationInfo != null ? stationInfo.getAddress() : "")
+                        .city(stationInfo != null ? stationInfo.getCity() : "")
+                        .district(stationInfo != null ? stationInfo.getDistrict() : "")
+                        .latitude(stationInfo != null ? stationInfo.getLatitude() : Double.valueOf(1))
+                        .longitude(stationInfo != null ? stationInfo.getLongitude() : Double.valueOf(1))
+                        .imei(excelRecord.getImei())
+                        .identityNo(excelRecord.getIdentityNo())
                         .build();
 
                 htsRecordRepository.save(hts);
             } catch (Exception e) {
-                log.warn("Kayıt işlenirken hata oluştu. ExcelRecord : {}", excelRecord, e);
+                log.info("Kayıt işlenirken hata oluştu. ExcelRecord : {}", excelRecord, e);
             }
         }
         log.info("geoLocationApiUsage : {}", geoLocationApiUsage.get());
-    }
-
-    public void importExcel(MultipartFile file) throws IOException {
-        List<ExcelRecord> excelRecords = filterUniquePerNDuration(excelReaderService.readExcel(file.getInputStream()));
-
-        AtomicInteger geoLocationApiUsage = new AtomicInteger();
-
-        for (ExcelRecord excelRecord : excelRecords) {
-            try {
-                if (StringUtils.isBlank(excelRecord.getBaseStation().getAddress())) {
-                    continue;
-                }
-
-                String baseStationId = excelRecord.getBaseStation().getBaseStationId();
-                BaseStationInfoEntity stationInfo = baseStationInfoCache.getBaseStationMap()
-                        .computeIfAbsent(baseStationId, id -> {
-                            GeocodingResult g = geocodingService.geocode(excelRecord.getBaseStation().getAddress());
-                            if (g == null) {
-                                return null;
-                            }
-                            geoLocationApiUsage.getAndIncrement();
-
-                            BaseStationInfoEntity entity = BaseStationInfoEntity.builder()
-                                    .baseStationId(id)
-                                    .address(excelRecord.getBaseStation().getAddress())
-                                    .city(g.getCity())
-                                    .district(g.getDistrict())
-                                    .latitude(g.getLatitude())
-                                    .longitude(g.getLongitude())
-                                    .build();
-
-                            baseStationInfoRepository.save(entity);
-                            return entity;
-                        });
-
-                if (stationInfo == null) {
-                    continue;
-                }
-
-                HtsRecordEntity hts = HtsRecordEntity.builder()
-                        .gsmNumber(excelRecord.getGsmNumber())
-                        .recordType(excelRecord.getRecordType())
-                        .otherNumber(excelRecord.getOtherNumber())
-                        .recordDatetime(DateUtil.convertStringToLocalDateTime(excelRecord.getRecordTime()))
-                        .fullName(excelRecord.getFullName())
-                        .baseStationId(baseStationId)
-                        .operator(excelRecord.getBaseStation().getOperator())
-                        .address(stationInfo.getAddress())
-                        .city(stationInfo.getCity())
-                        .district(stationInfo.getDistrict())
-                        .latitude(stationInfo.getLatitude())
-                        .longitude(stationInfo.getLongitude())
-                        .build();
-
-                htsRecordRepository.save(hts);
-            } catch (Exception e) {
-                log.warn("Kayıt işlenirken hata oluştu. ExcelRecord : {}", excelRecord, e);
-            }
-        }
-        log.info("geoLocationApiUsage : {}", geoLocationApiUsage.get());
-        // kayıt işlemleri burada devam eder...
     }
 
     private List<ExcelRecord> filterUniquePerNDuration(List<ExcelRecord> records) {
@@ -175,8 +119,7 @@ public class ExcelImportService {
                         .withSecond(0)
                         .withNano(0);
 
-                String key = roundedTime.toString(); // örneğin: 2024-06-12T14:35
-
+                String key = roundedTime + "_" + excelRecord.getBaseStation().getBaseStationId(); // örneğin: 2024-06-12T14:35
                 uniqueByInterval.putIfAbsent(key, excelRecord);
 
             } catch (Exception e) {
@@ -211,6 +154,8 @@ public class ExcelImportService {
                             .district(location.getState())
                             .latitude(location.getLat())
                             .longitude(location.getLon())
+                            .identityNo(excelRecord.getIdentityNo())
+                            .imei(excelRecord.getImei())
                             .build();
                     htsRecordRepository.save(htsRecordEntity);
                 } 

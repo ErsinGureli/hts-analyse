@@ -1,11 +1,12 @@
 package com.hts_analyse.service;
 
-import com.hts_analyse.model.Location;
+import com.hts_analyse.model.dto.Location;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.configurationprocessor.json.JSONArray;
 import org.springframework.boot.configurationprocessor.json.JSONObject;
@@ -17,7 +18,7 @@ public class NominatimGeocoder {
 
     public Location geocode(String address) throws Exception {
         String url = "https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q="
-                + URLEncoder.encode(address, "UTF-8");
+                + URLEncoder.encode(address, StandardCharsets.UTF_8);
         Thread.sleep(1000);
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestProperty("User-Agent", "JavaApp"); // zorunlu

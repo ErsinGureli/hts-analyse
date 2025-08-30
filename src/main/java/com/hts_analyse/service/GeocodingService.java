@@ -2,7 +2,7 @@ package com.hts_analyse.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hts_analyse.model.GeocodingResult;
+import com.hts_analyse.model.dto.GeocodingResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

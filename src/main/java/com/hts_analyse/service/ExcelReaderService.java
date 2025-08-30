@@ -1,14 +1,11 @@
 package com.hts_analyse.service;
 
-import com.hts_analyse.model.BaseStationDto;
-import com.hts_analyse.model.ExcelRecord;
-import java.io.InputStream;
+import com.hts_analyse.model.dto.BaseStationDto;
+import com.hts_analyse.model.dto.ExcelRecord;
 import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.poi.ss.usermodel.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.poi.util.IOUtils;
 import org.springframework.stereotype.Service;
 
 import java.io.FileInputStream;
@@ -23,6 +20,8 @@ public class ExcelReaderService {
     public List<ExcelRecord> readExcel(String filePath) {
         List<ExcelRecord> records = new ArrayList<>();
 
+        IOUtils.setByteArrayMaxOverride(200_000_000);
+
         try (FileInputStream fis = new FileInputStream(filePath);
                 Workbook workbook = WorkbookFactory.create(fis)) {
 
@@ -35,12 +34,16 @@ public class ExcelReaderService {
                     continue;
                 }
 
-                String gsmNumber = getCellValue(row.getCell(0));
-                String recordType = getCellValue(row.getCell(1));
-                String otherNumber = ""; //getCellValue(row.getCell(2));
-                String recordTime = getCellValue(row.getCell(2));
-                String fullName = "";   //getCellValue(row.getCell(4));
-                String baseStationRaw = getCellValue(row.getCell(3));
+                String orderNo = row.getCell(0).getStringCellValue();
+                String gsmNumber = getCellValue(row.getCell(1));
+                String recordType = getCellValue(row.getCell(2));
+                String otherNumber = getCellValue(row.getCell(3));
+                String recordTime = getCellValue(row.getCell(4));
+                String time = getCellValue(row.getCell(5));
+                String fullName = getCellValue(row.getCell(6));
+                String identityNo = getCellValue(row.getCell(7));
+                String imei = getCellValue(row.getCell(8));
+                String baseStationRaw = getCellValue(row.getCell(9));
 
                 BaseStationDto baseStation = parseBaseStation(baseStationRaw);
                 if(Objects.isNull(baseStation)) {
@@ -54,6 +57,8 @@ public class ExcelReaderService {
                         .recordTime(recordTime)
                         .fullName(fullName)
                         .baseStation(baseStation)
+                        .identityNo(identityNo)
+                        .imei(imei)
                         .build();
 
                 records.add(excelRecord);
@@ -61,49 +66,6 @@ public class ExcelReaderService {
 
         } catch (IOException e) {
             throw new RuntimeException("Failed to read Excel file: " + filePath, e);
-        }
-
-        return records;
-    }
-
-    public List<ExcelRecord> readExcel(InputStream inputStream) {
-        List<ExcelRecord> records = new ArrayList<>();
-
-        try (Workbook workbook = WorkbookFactory.create(inputStream)) {
-            Sheet sheet = workbook.getSheetAt(0);
-            boolean firstRow = true;
-
-            for (Row row : sheet) {
-                if (firstRow) {
-                    firstRow = false;
-                    continue;
-                }
-
-                String gsmNumber = getCellValue(row.getCell(0));
-                String recordType = getCellValue(row.getCell(1));
-                String otherNumber = ""; //getCellValue(row.getCell(2));
-                String recordTime = getCellValue(row.getCell(2));
-                String fullName = "";   //getCellValue(row.getCell(4));
-                String baseStationRaw = getCellValue(row.getCell(3));
-
-                BaseStationDto baseStation = parseBaseStation(baseStationRaw);
-                if (Objects.isNull(baseStation)) {
-                    continue;
-                }
-
-                ExcelRecord excelRecord = ExcelRecord.builder()
-                        .gsmNumber(gsmNumber)
-                        .recordType(recordType)
-                        .otherNumber(otherNumber)
-                        .recordTime(recordTime)
-                        .fullName(fullName)
-                        .baseStation(baseStation)
-                        .build();
-
-                records.add(excelRecord);
-            }
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to read Excel input stream", e);
         }
 
         return records;

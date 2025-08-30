@@ -1,4 +1,4 @@
-package com.hts_analyse.model;
+package com.hts_analyse.model.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -16,4 +16,6 @@ public class ExcelRecord {
     private String recordTime;
     private String fullName;
     private BaseStationDto baseStation;
+    private String identityNo;
+    private String imei;
 }

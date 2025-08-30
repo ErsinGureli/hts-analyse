@@ -54,4 +54,16 @@
     </createIndex>
   </changeSet>
 
+  <changeSet id="004-add-identityno-imei-to-hts-record" author="ersin">
+    <addColumn tableName="hts_record">
+      <column name="identity_no" type="VARCHAR(50)"/>
+      <column name="imei" type="VARCHAR(50)"/>
+    </addColumn>
+  </changeSet>
+
+  <changeSet id="005-alter-othernumber-identityno-length-htsrecord" author="ersin">
+    <modifyDataType tableName="hts_record" columnName="other_number" newDataType="VARCHAR(100)"/>
+    <modifyDataType tableName="hts_record" columnName="identity_no" newDataType="VARCHAR(100)"/>
+  </changeSet>
+
 </databaseChangeLog>
