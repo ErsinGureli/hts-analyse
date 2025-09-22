@@ -3,6 +3,7 @@ package com.hts_analyse.controller;
 import com.hts_analyse.model.dto.GroupedResult;
 import com.hts_analyse.model.dto.HtsRecordDto;
 import com.hts_analyse.model.response.CommonContactResponse;
+import com.hts_analyse.service.CommonContactExcelService;
 import com.hts_analyse.service.HtsAnalyseService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -13,6 +14,9 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class HtsAnalyseController {
 
     private final HtsAnalyseService htsAnalyseService;
+    private final CommonContactExcelService commonContactExcelService;
 
     @GetMapping
     public ResponseEntity<List<GroupedResult>> analyse(
@@ -57,6 +62,21 @@ public class HtsAnalyseController {
             @RequestParam String gsm1,
             @RequestParam String gsm2) {
         return ResponseEntity.ok(htsAnalyseService.findCommonContacts(gsm1, gsm2));
+    }
+
+    @GetMapping("/common-contacts-as-excel")
+    public ResponseEntity<byte[]> downloadCommonContactsExcel(
+            @RequestParam String gsm1,
+            @RequestParam String gsm2) {
+
+        CommonContactResponse response = htsAnalyseService.findCommonContacts(gsm1, gsm2);
+        byte[] excelBytes = commonContactExcelService.generateExcel(response);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+        headers.setContentDisposition(ContentDisposition.attachment().filename("common_contacts_" + gsm1 + "_" + gsm2 + ".xlsx").build());
+
+        return ResponseEntity.ok().headers(headers).body(excelBytes);
     }
 
     @GetMapping("/last-names")

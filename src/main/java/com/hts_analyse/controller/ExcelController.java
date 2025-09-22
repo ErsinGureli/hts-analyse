@@ -26,10 +26,10 @@ public class ExcelController {
     private final CityLoaderService cityLoaderService;
     private final ExcelImportService excelImportService;
 
-    @GetMapping("/read")
+   /* @GetMapping("/read")
     public List<ExcelRecord> readExcel(@RequestParam String filePath) {
         return excelReaderService.readExcel(filePath);
-    }
+    } */
 
     @GetMapping("/analyse")
     public List<ExcelRecord> analyseExcel(@RequestParam String filePath) {
@@ -60,7 +60,7 @@ public class ExcelController {
         return ResponseEntity.ok("success");
     }
 
-    @PostMapping("/importExcelWithFreeAPI")
+  /*  @PostMapping("/importExcelWithFreeAPI")
     public ResponseEntity<String> importExcelWithFreeApi(@RequestParam String filePath) {
         excelImportService.importExcelTests(filePath);
         return ResponseEntity.ok("success");
@@ -74,6 +74,6 @@ public class ExcelController {
     @PostMapping("/checkGeoapifyGeocoderService")
     public ResponseEntity<String> checkAddressWithGeoapifyGeocoderService(@RequestParam String address) {
         return ResponseEntity.ok(excelImportService.checkByGeoapify(address));
-    }
+    } */
 
 }
