@@ -14,8 +14,8 @@ public class HtsRecordQueryService {
 
     private final HtsRecordRepository htsRecordRepository;
 
-    public List<HtsRecordEntity> findAllByGsmNumber(String gsm1){
-        return htsRecordRepository.findAllByGsmNumber(gsm1);
+    public List<HtsRecordEntity> findAllByGsmNumber(String gsmNumber){
+        return htsRecordRepository.findAllByGsmNumber(gsmNumber);
     }
 
     public List<HtsRecordEntity> findNearbyRecords(List<String> gsmNumbers, LocalDateTime startTime, LocalDateTime endTime, double lat, double lon, double distance){

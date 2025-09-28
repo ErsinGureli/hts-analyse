@@ -2,6 +2,8 @@ package com.hts_analyse.service;
 
 import com.hts_analyse.model.dto.BaseStationDto;
 import com.hts_analyse.model.dto.ExcelRecord;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
@@ -69,6 +71,75 @@ public class ExcelReaderService {
         }
 
         return records;
+    }
+
+    public List<ExcelRecord> readFullExcel(String filePath) {
+        List<ExcelRecord> records = new ArrayList<>();
+        IOUtils.setByteArrayMaxOverride(200_000_000);
+
+        try (FileInputStream fis = new FileInputStream(filePath);
+                Workbook workbook = WorkbookFactory.create(fis)) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+            boolean insideRelevantSection = false;
+            Map<String, Integer> columnIndexMap = new HashMap<>();
+
+            for (Row row : sheet) {
+                Cell firstCellObj = row.getCell(0);
+                if (firstCellObj == null) continue;
+
+                String firstCell = getCellValue(firstCellObj).trim().toUpperCase();
+                if (firstCell.equals("GSM GÖRÜŞME SORGU SONUÇLARI") ||
+                        firstCell.equals("İNTERNET BAĞLANTI (GPRS) İLETİŞİM SORGU SONUÇLARI")) {
+                    insideRelevantSection = true;
+                    columnIndexMap.clear(); // yeni tablo için reset
+                    continue;
+                }
+
+                if (firstCell.endsWith("SORGU SONUÇLARI")) {
+                    insideRelevantSection = false;
+                    continue;
+                }
+
+                if (!insideRelevantSection) continue;
+
+                if (columnIndexMap.isEmpty()) {
+                    for (Cell cell : row) {
+                        String header = getCellValue(cell).trim().toUpperCase();
+                        columnIndexMap.put(header, cell.getColumnIndex());
+                    }
+                    continue;
+                }
+
+                try {
+                    ExcelRecord excelRecord = ExcelRecord.builder()
+                            .gsmNumber(getValue(columnIndexMap, row, "NUMARA"))
+                            .recordType(getValue(columnIndexMap, row, "TİP"))
+                            .otherNumber(getValue(columnIndexMap, row, "DİĞER NUMARA"))
+                            .recordTime(getValue(columnIndexMap, row, "TARİH"))
+                            .fullName(getValue(columnIndexMap, row, "İSİM SOYİSİM ( DİĞER NUMARA)"))
+                            .identityNo(getValue(columnIndexMap, row, "TC KİMLİK NO (DİĞER NUMARA)"))
+                            .imei(getValue(columnIndexMap, row, "IMEI"))
+                            .baseStation(parseBaseStation(getValue(columnIndexMap, row, "BAZ (NUMARA)")))
+                            .build();
+
+                    records.add(excelRecord);
+                } catch (Exception e) {
+                    log.warn("Satır okunamadı, atlanıyor. Hata: {}", e.getMessage());
+                }
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read Excel file: " + filePath, e);
+        }
+
+        return records;
+    }
+
+    private String getValue(Map<String, Integer> map, Row row, String key) {
+        Integer idx = map.get(key);
+        if (idx == null) return "";
+        return getCellValue(row.getCell(idx));
     }
 
     private String getCellValue(Cell cell) {

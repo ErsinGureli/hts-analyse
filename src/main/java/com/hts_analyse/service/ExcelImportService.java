@@ -38,8 +38,8 @@ public class ExcelImportService {
     private int intervalMinutes;
 
     public void importExcel(String filePath, boolean shouldAnalyseHts, boolean shouldFilterHtsRecords ) {
-        List<ExcelRecord> excelRecords = excelReaderService.readExcel(filePath);
-        List<ExcelRecord> filteredExcelRecords = shouldFilterHtsRecords ? filterUniquePerNDuration(excelReaderService.readExcel(filePath)) : excelRecords;
+        List<ExcelRecord> excelRecords = excelReaderService.readFullExcel(filePath);
+        List<ExcelRecord> filteredExcelRecords = shouldFilterHtsRecords ? filterUniquePerNDuration(excelRecords) : excelRecords;
 
         AtomicInteger geoLocationApiUsage = new AtomicInteger();
 
@@ -128,42 +128,6 @@ public class ExcelImportService {
         }
 
         return List.copyOf(uniqueByInterval.values());
-    }
-
-    public void importExcelTests(String filePath) {
-        List<ExcelRecord> excelRecords = excelReaderService.readExcel(filePath);
-        for (ExcelRecord excelRecord : excelRecords) {
-            try {
-                if(StringUtils.isBlank(excelRecord.getBaseStation().getAddress())) {
-                    continue;
-                }
-
-                Location location = nominatimGeocoder.geocode(excelRecord.getBaseStation().getAddress());
-                if(location != null && StringUtils.isNotBlank(location.getCity()) && StringUtils.isNotBlank(location.getState())) {
-
-                    HtsRecordEntity htsRecordEntity = HtsRecordEntity.builder()
-                            .gsmNumber(excelRecord.getGsmNumber())
-                            .recordType(excelRecord.getRecordType())
-                            .otherNumber(excelRecord.getOtherNumber())
-                            .recordDatetime(DateUtil.convertStringToLocalDateTime(excelRecord.getRecordTime()))
-                            .fullName(excelRecord.getFullName())
-                            .baseStationId(excelRecord.getBaseStation().getBaseStationId())
-                            .operator(excelRecord.getBaseStation().getOperator())
-                            .address(excelRecord.getBaseStation().getAddress())
-                            .city(location.getCity())
-                            .district(location.getState())
-                            .latitude(location.getLat())
-                            .longitude(location.getLon())
-                            .identityNo(excelRecord.getIdentityNo())
-                            .imei(excelRecord.getImei())
-                            .build();
-                    htsRecordRepository.save(htsRecordEntity);
-                } 
-
-            } catch (Exception e) {
-                log.warn("Kayıt işlenirken hata oluştu: {}", excelRecord, e);
-            }
-        }
     }
 
     public String checkFreeApi(String address){

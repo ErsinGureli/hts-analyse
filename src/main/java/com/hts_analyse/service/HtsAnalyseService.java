@@ -50,8 +50,8 @@ public class HtsAnalyseService {
                 recordsMap.put(htsRecordEntity.getId(), otherRecordEntities);
             }
         }
-        List<HtsAnalyseDto> raw = cretaeHtsAnalyseDtoList(recordsMap, recordEntities, distance);
-        return HtsAnalyseGrouper.groupByStationsAndDay(raw);
+        List<HtsAnalyseDto> htsAnalyseDtoList = cretaeHtsAnalyseDtoList(recordsMap, recordEntities, distance);
+        return HtsAnalyseGrouper.groupByStationsAndDay(htsAnalyseDtoList);
     }
 
     public List<HtsRecordDto> findNearbyBazRecords(String address, List<String> gsmNumbers, int distance,
@@ -127,6 +127,8 @@ public class HtsAnalyseService {
                             .baseGsmAddress(htsRecordEntity.getAddress())
                             .baseStationId(htsRecordEntity.getBaseStationId())
                             .otherStationId(otherHtsRecordEntity.getBaseStationId())
+                            .latitude(htsRecordEntity.getLatitude())
+                            .longitude(htsRecordEntity.getLongitude())
                             .build());
                 }
             }

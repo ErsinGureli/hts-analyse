@@ -51,7 +51,7 @@ public class HtsAnalyseController {
             @RequestParam String address,
             @RequestParam List<String> gsmNumbers,
             @RequestParam int distance,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,   //2023-03-11T00:00:00.000
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
         List<HtsRecordDto> result = htsAnalyseService.findNearbyBazRecords(address, gsmNumbers, distance, startTime, endTime);
         return ResponseEntity.ok(result);

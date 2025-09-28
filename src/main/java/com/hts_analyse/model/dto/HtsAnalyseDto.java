@@ -20,5 +20,7 @@ public class HtsAnalyseDto {
     private Double distance;
     private String baseStationId;
     private String otherStationId;
+    private Double longitude;
+    private Double latitude;
 
 }
