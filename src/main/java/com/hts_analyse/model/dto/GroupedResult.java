@@ -13,8 +13,10 @@ public class GroupedResult {
     private String otherGsmNumber;
     private String baseAddress;
     private String otherAddress;
-    private Double latitude;
-    private Double longitude;
+    private Double baseLatitude;
+    private Double baseLongitude;
+    private Double otherLatitude;
+    private Double otherLongitude;
     private Set<String> baseStationIds;
     private Set<String> otherStationIds;
     private int totalPairs;

@@ -7,8 +7,8 @@ public record GroupKey(String baseGsmNumber, String otherGsmNumber, long latRoun
         return new GroupKey(
                 safe(dto.getBaseGsmNumber()),
                 safe(dto.getOtherGsmNumber()),
-                normalize(dto.getLatitude()),
-                normalize(dto.getLongitude())
+                normalize(dto.getBaseLatitude()),
+                normalize(dto.getBaseLongitude())
         );
     }
 

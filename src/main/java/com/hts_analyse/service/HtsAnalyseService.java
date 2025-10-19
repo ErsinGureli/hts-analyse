@@ -127,8 +127,10 @@ public class HtsAnalyseService {
                             .baseGsmAddress(htsRecordEntity.getAddress())
                             .baseStationId(htsRecordEntity.getBaseStationId())
                             .otherStationId(otherHtsRecordEntity.getBaseStationId())
-                            .latitude(htsRecordEntity.getLatitude())
-                            .longitude(htsRecordEntity.getLongitude())
+                            .baseLatitude(htsRecordEntity.getLatitude())
+                            .baseLongitude(htsRecordEntity.getLongitude())
+                            .otherLatitude(otherHtsRecordEntity.getLatitude())
+                            .otherLongitude(otherHtsRecordEntity.getLongitude())
                             .build());
                 }
             }
@@ -138,9 +140,9 @@ public class HtsAnalyseService {
     }
 
     private List<HtsAnalyseDto> filterListByDistance(List<HtsAnalyseDto> htsAnalyseDtoList, int distance){
-        Predicate<HtsAnalyseDto> isFartherThan1Km = dto -> dto.getDistance() <= distance;
+        Predicate<HtsAnalyseDto> isFartherThanDistance = dto -> dto.getDistance() <= distance;
         return htsAnalyseDtoList.stream()
-                .filter(isFartherThan1Km)
+                .filter(isFartherThanDistance)
                 .toList();
     }
 

@@ -19,10 +19,10 @@ public class HtsAnalyseGrouper {
 
     public List<GroupedResult> groupByStationsAndDay(List<HtsAnalyseDto> items) {
         return items.stream()
-                .collect(Collectors.groupingBy(GroupKey::from)) // ✅ asıl düzeltme burada
-                .entrySet()
+                .collect(Collectors.groupingBy(GroupKey::from))
+                .values()
                 .stream()
-                .map(entry -> buildGroupedResult(entry.getValue()))
+                .map(HtsAnalyseGrouper::buildGroupedResult)
                 .toList();
     }
 
@@ -59,8 +59,10 @@ public class HtsAnalyseGrouper {
                 .otherGsmNumber(first.getOtherGsmNumber())
                 .baseAddress(first.getBaseGsmAddress())
                 .otherAddress(first.getOtherGsmAddress())
-                .latitude(first.getLatitude())
-                .longitude(first.getLongitude())
+                .baseLatitude(first.getBaseLatitude())
+                .baseLongitude(first.getBaseLongitude())
+                .otherLatitude(first.getOtherLatitude())
+                .otherLongitude(first.getOtherLongitude())
                 .baseStationIds(baseStationIds)
                 .otherStationIds(otherStationIds)
                 .totalPairs(groupItems.size())
