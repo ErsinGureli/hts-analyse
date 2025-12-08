@@ -91,16 +91,30 @@ public class HtsAnalyseGrouper {
                 .map(entry -> {
                     LocalDateTime base = entry.getKey();
                     List<LocalDateTime> others = entry.getValue();
+
+                    // her baseTime için en yakın otherTime
                     LocalDateTime closest = others.stream()
                             .min(Comparator.comparingLong(o ->
                                     Math.abs(Duration.between(base, o).toMillis())))
                             .orElse(null);
 
-                    return new PairGroup(
-                            base.toLocalTime().format(timeFmt),
-                            closest != null ? closest.toLocalTime().format(timeFmt) : null
-                    );
+                    return new AbstractMap.SimpleEntry<>(base, closest);
                 })
+                // 🔹 Buradan itibaren: aynı otherTime’a sahip olanlardan en yakını seç
+                .collect(Collectors.toMap(
+                        Map.Entry::getValue, // key = otherTime
+                        Map.Entry::getKey,   // value = baseTime
+                        (base1, base2) -> {  // merge function → daha yakın baseTime’ı seç
+                            long diff1 = Math.abs(Duration.between(base1, base2).toMillis());
+                            return diff1 <= 0 ? base1 : base2;
+                        }
+                ))
+                .entrySet().stream()
+                .sorted(Map.Entry.comparingByValue()) // baseTime sırasına göre gösterelim
+                .map(entry -> new PairGroup(
+                        entry.getValue().toLocalTime().format(timeFmt), // baseTime
+                        entry.getKey() != null ? entry.getKey().toLocalTime().format(timeFmt) : null // otherTime
+                ))
                 .toList();
 
         return DayGroup.builder()

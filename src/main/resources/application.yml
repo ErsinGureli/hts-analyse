@@ -24,8 +24,11 @@ city:
     path: /Users/ersingureli/Desktop/tasklar ve dokumanlar/hts/il_ilce.csv
 
 google:
-  api:
+  geocoding-api:
     key: AIzaSyBxZ4cEcN2i-xaiiDbsjf8vVxvaGr7hEmc
+  maps-api:
+    key : AIzaSyBxZ4cEcN2i-xaiiDbsjf8vVxvaGr7hEmc
+
 
 geoapify:
   api:

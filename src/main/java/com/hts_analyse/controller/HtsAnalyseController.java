@@ -4,15 +4,18 @@ import com.hts_analyse.model.dto.GroupedResult;
 import com.hts_analyse.model.dto.HtsRecordDto;
 import com.hts_analyse.model.response.CommonContactResponse;
 import com.hts_analyse.service.CommonContactExcelService;
+import com.hts_analyse.service.GoogleMapPageRenderer;
 import com.hts_analyse.service.HtsAnalyseService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -31,6 +34,9 @@ public class HtsAnalyseController {
     private final HtsAnalyseService htsAnalyseService;
     private final CommonContactExcelService commonContactExcelService;
 
+    @Value("${google.maps-api.key}")
+    private String mapsApiKey;
+
     @GetMapping
     public ResponseEntity<List<GroupedResult>> analyse(
             @RequestParam String baseGsmNumber,
@@ -43,6 +49,37 @@ public class HtsAnalyseController {
         return ResponseEntity.ok(
                 htsAnalyseService.analyseDistance(baseGsmNumber, comparableGsmNumbers, minute, distance, startDate, endDate)
         );
+    }
+
+    @GetMapping(value = "/map", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> analyseMap(
+            @RequestParam String baseGsmNumber,
+            @RequestParam List<String> comparableGsmNumbers,
+            @RequestParam(defaultValue = "60") int minute,
+            @RequestParam(defaultValue = "1000") int distance,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false, defaultValue = "false") boolean open) {
+
+        List<GroupedResult> data = htsAnalyseService
+                .analyseDistance(baseGsmNumber, comparableGsmNumbers, minute, distance, startDate, endDate);
+
+        String html = GoogleMapPageRenderer.render(data, mapsApiKey);
+
+        if (open && java.awt.Desktop.isDesktopSupported() && !java.awt.GraphicsEnvironment.isHeadless()) {
+            try {
+                java.nio.file.Path tmp = java.nio.file.Files.createTempFile("hts-map-", ".html");
+                java.nio.file.Files.writeString(tmp, html, java.nio.charset.StandardCharsets.UTF_8);
+                java.awt.Desktop.getDesktop().browse(tmp.toUri());
+            } catch (Exception e) {
+                // Sessizce geçmek yerine logla, ama response’u yine de dön:
+                org.slf4j.LoggerFactory.getLogger(getClass()).warn("Auto-open failed", e);
+            }
+        }
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .body(html);
     }
 
 
@@ -93,6 +130,39 @@ public class HtsAnalyseController {
 
         return ResponseEntity.ok(response);
     }
+
+    @GetMapping("/most-contacts-last-names")
+    public ResponseEntity<List<Map<String, Object>>> getMostContactsLastNamesWithCount(
+            @RequestParam String gsmNumber,
+            @RequestParam(name = "minCount", defaultValue = "2") int minCount
+    ) {
+        List<Object[]> results = htsAnalyseService.findLastNamesWithCount(gsmNumber);
+
+        List<Map<String, Object>> response = results.stream()
+                // 1) count filtresi
+                .filter(row -> {
+                    Number count = (Number) row[1];
+                    return count != null && count.intValue() >= minCount;
+                })
+                // 2) count DESC sıralama
+                .sorted((r1, r2) -> {
+                    Number c1 = (Number) r1[1];
+                    Number c2 = (Number) r2[1];
+                    return Integer.compare(c2.intValue(), c1.intValue()); // büyükten küçüğe
+                })
+                // 3) Map'e çevirme
+                .map(row -> {
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    map.put("last_word", row[0]);
+                    map.put("count", row[1]);
+                    map.put("person_count", row[2]);
+                    return map;
+                })
+                .toList();
+
+        return ResponseEntity.ok(response);
+    }
+
 
     @GetMapping("/full-names")
     public ResponseEntity<List<Map<String, Object>>> getFullNamesWithIdentityNoAndCount(

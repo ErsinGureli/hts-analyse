@@ -20,7 +20,7 @@ public class GeocodingService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final WebClient webClient = WebClient.create();
 
-    @Value("${google.api.key}")
+    @Value("${google.geocoding-api.key}")
     private String apiKey;
 
     public GeocodingResult geocode(String address) {

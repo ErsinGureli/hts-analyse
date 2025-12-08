@@ -2,9 +2,6 @@ package com.hts_analyse.service;
 
 import com.hts_analyse.model.dto.BaseStationDto;
 import com.hts_analyse.model.dto.ExcelRecord;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.util.IOUtils;
@@ -12,8 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -36,7 +32,7 @@ public class ExcelReaderService {
                     continue;
                 }
 
-                String orderNo = row.getCell(0).getStringCellValue();
+                String orderNo = getCellValue(row.getCell(0)); // kullanılmıyorsa silinebilir
                 String gsmNumber = getCellValue(row.getCell(1));
                 String recordType = getCellValue(row.getCell(2));
                 String otherNumber = getCellValue(row.getCell(3));
@@ -48,7 +44,7 @@ public class ExcelReaderService {
                 String baseStationRaw = getCellValue(row.getCell(9));
 
                 BaseStationDto baseStation = parseBaseStation(baseStationRaw);
-                if(Objects.isNull(baseStation)) {
+                if (baseStation == null) {
                     continue;
                 }
 
@@ -89,8 +85,10 @@ public class ExcelReaderService {
                 if (firstCellObj == null) continue;
 
                 String firstCell = getCellValue(firstCellObj).trim().toUpperCase();
+
                 if (firstCell.equals("GSM GÖRÜŞME SORGU SONUÇLARI") ||
                         firstCell.equals("İNTERNET BAĞLANTI (GPRS) İLETİŞİM SORGU SONUÇLARI")) {
+
                     insideRelevantSection = true;
                     columnIndexMap.clear(); // yeni tablo için reset
                     continue;
@@ -103,9 +101,10 @@ public class ExcelReaderService {
 
                 if (!insideRelevantSection) continue;
 
+                // HEADER SATIRI
                 if (columnIndexMap.isEmpty()) {
                     for (Cell cell : row) {
-                        String header = getCellValue(cell).trim().toUpperCase();
+                        String header = getCellValue(cell).trim();
                         columnIndexMap.put(header, cell.getColumnIndex());
                     }
                     continue;
@@ -136,11 +135,70 @@ public class ExcelReaderService {
         return records;
     }
 
-    private String getValue(Map<String, Integer> map, Row row, String key) {
-        Integer idx = map.get(key);
-        if (idx == null) return "";
+    // ----------------------------------------------------
+    // HEADER EŞLEŞTİRME
+    // ----------------------------------------------------
+
+    private String getValue(Map<String, Integer> map, Row row, String expectedHeader) {
+        Integer idx = findColumnIndex(map, expectedHeader);
+        if (idx == null) {
+            return "";
+        }
         return getCellValue(row.getCell(idx));
     }
+
+    private Integer findColumnIndex(Map<String, Integer> columnIndexMap, String expectedHeader) {
+        String normalizedExpected = normalize(expectedHeader);
+
+        for (Map.Entry<String, Integer> entry : columnIndexMap.entrySet()) {
+            String header = entry.getKey();
+            String normalizedHeader = normalize(header);
+
+            if (normalizedHeader.equals(normalizedExpected)) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Tüm Türkçe karakterleri ASCII'ye çevirir,
+     * gereksiz noktalama işaretlerini atar, boşlukları sadeleştirir.
+     */
+    private String normalize(String s) {
+        if (s == null) return "";
+
+        String upper = s.toUpperCase(Locale.ROOT);
+
+        // Türkçe karakterleri ASCII'ye indir
+        upper = upper
+                .replace('İ', 'I')
+                .replace('I', 'I') // no-op ama dursun
+                .replace('I', 'I')
+                .replace('Ğ', 'G')
+                .replace('Ü', 'U')
+                .replace('Ş', 'S')
+                .replace('Ö', 'O')
+                .replace('Ç', 'C')
+                // olası küçükler kalırsa
+                .replace('ı', 'I')
+                .replace('ğ', 'G')
+                .replace('ü', 'U')
+                .replace('ş', 'S')
+                .replace('ö', 'O')
+                .replace('ç', 'C');
+
+        // Harf/rakam dışındaki her şeyi boşluk yap
+        upper = upper.replaceAll("[^A-Z0-9]+", " ");
+        // Birden fazla boşluğu teke indir
+        upper = upper.replaceAll("\\s+", " ").trim();
+
+        return upper;
+    }
+
+    // ----------------------------------------------------
+    // CELL OKUMA
+    // ----------------------------------------------------
 
     private String getCellValue(Cell cell) {
         if (cell == null) return "";
@@ -156,12 +214,16 @@ public class ExcelReaderService {
         };
     }
 
+    // ----------------------------------------------------
+    // BAZ İSTASYONU PARSE
+    // ----------------------------------------------------
+
     private BaseStationDto parseBaseStation(String raw) {
         if (raw == null || raw.isBlank()) {
             return new BaseStationDto("", "", "");
         }
 
-        try{
+        try {
             String[] parts = raw.split(" - ");
             String id = parts.length > 0 ? parts[0].trim() : "";
             String operator = parts.length > 1 ? parts[1].trim() : "";
@@ -172,8 +234,8 @@ public class ExcelReaderService {
                     .operator(operator)
                     .address(address)
                     .build();
-        }catch (Exception e){
-            log.error("parse edilemeyen string: " + raw);
+        } catch (Exception e) {
+            log.error("parse edilemeyen string: {}", raw);
             return null;
         }
     }

@@ -16,4 +16,18 @@ public class GeoUtils {
 
         return EARTH_RADIUS_METERS * c;
     }
+
+
+    public static void main(String[] args) {
+        double baseLat  = 41.0119435;
+        double baseLon  = 29.0752319;
+        double otherLat = 41.0160615;
+        double otherLon = 29.0747173;
+
+        double dCorrect = calculateDistance(baseLat, baseLon, otherLat, otherLon);
+        double dSwapped = calculateDistance(baseLon, baseLat, otherLon, otherLat); // bilerek lat/lon ters
+
+        System.out.printf("Doğru sırayla (lat,lon → lat,lon): %.3f m%n", dCorrect);
+        System.out.printf("Ters sırayla  (lon,lat → lon,lat): %.3f m%n", dSwapped);
+    }
 }
