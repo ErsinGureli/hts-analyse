@@ -2,9 +2,9 @@ package com.hts_analyse.model.record;
 
 import com.hts_analyse.model.dto.HtsAnalyseDto;
 
-public record GroupKey(String baseGsmNumber, String otherGsmNumber, long latRounded, long lonRounded) {
-    public static GroupKey from(HtsAnalyseDto dto) {
-        return new GroupKey(
+public record HtsAnalyseStationKey(String baseGsmNumber, String otherGsmNumber, long latRounded, long lonRounded) {
+    public static HtsAnalyseStationKey from(HtsAnalyseDto dto) {
+        return new HtsAnalyseStationKey(
                 safe(dto.getBaseGsmNumber()),
                 safe(dto.getOtherGsmNumber()),
                 normalize(dto.getBaseLatitude()),

@@ -1,12 +1,12 @@
 package com.hts_analyse.controller;
 
 import com.hts_analyse.model.dto.GroupedResult;
-import com.hts_analyse.model.dto.HtsRecordDto;
+import com.hts_analyse.model.dto.HtsRecordGroupedDto;
+import com.hts_analyse.model.record.HtsPairsResponse;
 import com.hts_analyse.model.response.CommonContactResponse;
 import com.hts_analyse.service.CommonContactExcelService;
 import com.hts_analyse.service.GoogleMapPageRenderer;
 import com.hts_analyse.service.HtsAnalyseService;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -43,11 +43,24 @@ public class HtsAnalyseController {
             @RequestParam List<String> comparableGsmNumbers,
             @RequestParam(required = false, defaultValue = "60") int minute,
             @RequestParam(required = false, defaultValue = "1000") int distance,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDateTime startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDateTime endDate) {
 
         return ResponseEntity.ok(
                 htsAnalyseService.analyseDistance(baseGsmNumber, comparableGsmNumbers, minute, distance, startDate, endDate)
+        );
+    }
+
+    @GetMapping("/api/v1/hts/analyse/pairs")
+    public ResponseEntity<HtsPairsResponse> analysePairs(
+            @RequestParam String baseGsmNumber,
+            @RequestParam List<String> comparableGsmNumbers,
+            @RequestParam(required = false, defaultValue = "60") int minute,
+            @RequestParam(required = false, defaultValue = "1000") int distance,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDateTime startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDateTime endDate) {
+        return ResponseEntity.ok(
+                htsAnalyseService.analyseNetworkPairs(baseGsmNumber, comparableGsmNumbers, minute, distance, startDate, endDate)
         );
     }
 
@@ -57,8 +70,8 @@ public class HtsAnalyseController {
             @RequestParam List<String> comparableGsmNumbers,
             @RequestParam(defaultValue = "60") int minute,
             @RequestParam(defaultValue = "1000") int distance,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDateTime startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDateTime endDate,
             @RequestParam(required = false, defaultValue = "false") boolean open) {
 
         List<GroupedResult> data = htsAnalyseService
@@ -84,13 +97,13 @@ public class HtsAnalyseController {
 
 
     @GetMapping("/nearby-baz-records")
-    public ResponseEntity<List<HtsRecordDto>> findNearbyBazRecords(
+    public ResponseEntity<List<HtsRecordGroupedDto>> findNearbyBazRecords(
             @RequestParam String address,
             @RequestParam List<String> gsmNumbers,
             @RequestParam int distance,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,   //2023-03-11T00:00:00.000
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
-        List<HtsRecordDto> result = htsAnalyseService.findNearbyBazRecords(address, gsmNumbers, distance, startTime, endTime);
+        List<HtsRecordGroupedDto> result = htsAnalyseService.findNearbyBazRecordsGrouped(address, gsmNumbers, distance, startTime, endTime);
         return ResponseEntity.ok(result);
     }
 

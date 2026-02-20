@@ -19,10 +19,10 @@ public class GeoUtils {
 
 
     public static void main(String[] args) {
-        double baseLat  = 41.0119435;
-        double baseLon  = 29.0752319;
-        double otherLat = 41.0160615;
-        double otherLon = 29.0747173;
+        double baseLat  = 37.7434522;
+        double baseLon  = 29.10286409999999;
+        double otherLat = 38.4708595;
+        double otherLon = 27.0933154;
 
         double dCorrect = calculateDistance(baseLat, baseLon, otherLat, otherLon);
         double dSwapped = calculateDistance(baseLon, baseLat, otherLon, otherLat); // bilerek lat/lon ters

@@ -10,24 +10,32 @@ import com.hts_analyse.model.dto.GeocodingResult;
 import com.hts_analyse.model.dto.GroupedResult;
 import com.hts_analyse.model.dto.HtsAnalyseDto;
 import com.hts_analyse.model.dto.HtsRecordDto;
+import com.hts_analyse.model.dto.HtsRecordGroupedDto;
+import com.hts_analyse.model.dto.RecordTypeTimelineDto;
+import com.hts_analyse.model.record.HtsPairsResponse;
+import com.hts_analyse.model.record.NearbyBazKey;
+import com.hts_analyse.model.record.PairKey;
 import com.hts_analyse.model.response.CommonContactResponse;
 import com.hts_analyse.util.GeoUtils;
 import com.hts_analyse.util.GsmValidator;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -38,31 +46,173 @@ public class HtsAnalyseService {
     private final GeocodingService geocodingService;
     private final HtsRecordQueryService htsRecordQueryService;
 
-    public List<GroupedResult> analyseDistance(String baseGsmNumber, List<String> compareGsmNumbers, int minute, int distance, LocalDate startDate, LocalDate endDate) {
+    public List<GroupedResult> analyseDistance(String baseGsmNumber, List<String> compareGsmNumbers, int minute, int distance,
+            LocalDateTime startDate, LocalDateTime endDate) {
         List<HtsRecordEntity> recordEntities = findHtsRecordsByGsmNumber(baseGsmNumber, startDate, endDate);
 
         Map<Long, List<HtsRecordEntity>> recordsMap = new HashMap<>();
 
-        for(HtsRecordEntity htsRecordEntity : recordEntities){
+        for (HtsRecordEntity htsRecordEntity : recordEntities) {
             List<HtsRecordEntity> otherRecordEntities = findHtsRecordsByGsmNumberAndRecordTimeAndDistance(compareGsmNumbers,
-                    htsRecordEntity.getRecordDatetime(), minute, htsRecordEntity.getLatitude(), htsRecordEntity.getLongitude(),distance);
-            if(!otherRecordEntities.isEmpty()) {
+                    htsRecordEntity.getRecordDatetime(), minute, htsRecordEntity.getLatitude(), htsRecordEntity.getLongitude(), distance);
+
+            if (!otherRecordEntities.isEmpty()) {
                 recordsMap.put(htsRecordEntity.getId(), otherRecordEntities);
             }
         }
+
         List<HtsAnalyseDto> htsAnalyseDtoList = cretaeHtsAnalyseDtoList(recordsMap, recordEntities, distance);
         return HtsAnalyseGrouper.groupByStationsAndDay(htsAnalyseDtoList);
     }
 
+    public HtsPairsResponse analyseNetworkPairs(
+            String baseGsmNumber,
+            List<String> comparableGsmNumbers,
+            int minute,
+            int distance,
+            LocalDateTime startDate,
+            LocalDateTime endDate
+    ) {
+        // 1) base ↔ others (mevcut fonksiyonun reuse)
+        List<GroupedResult> baseVsOthers =
+                analyseDistance(baseGsmNumber, comparableGsmNumbers, minute, distance, startDate, endDate);
+
+        // 2) others ↔ others (pair bazlı, duplicate yok)
+        Map<PairKey, List<GroupedResult>> othersPairs = new LinkedHashMap<>();
+
+        // İsteğe bağlı: aynı gsm tekrar gelmişse temizle (order korunur)
+        List<String> uniqueComparables = comparableGsmNumbers.stream()
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .toList();
+
+        for (int i = 0; i < uniqueComparables.size(); i++) {
+            for (int j = i + 1; j < uniqueComparables.size(); j++) {
+                String a = uniqueComparables.get(i);
+                String b = uniqueComparables.get(j);
+
+                // sadece iki numara arasında analiz
+                List<GroupedResult> result =
+                        analyseDistance(a, List.of(b), minute, distance, startDate, endDate);
+
+                if (result != null && !result.isEmpty()) {
+                    othersPairs.put(new PairKey(a, b), result);
+                }
+            }
+        }
+
+        return new HtsPairsResponse(baseGsmNumber, baseVsOthers, othersPairs);
+    }
+
     public List<HtsRecordDto> findNearbyBazRecords(String address, List<String> gsmNumbers, int distance,
             LocalDateTime startTime, LocalDateTime endTime) {
-        GeocodingResult g = geocodingService.geocode(address);
-        if (g == null) return Collections.emptyList();
+        GeocodingResult geocodingResult = geocodingService.geocode(address);
+        if (geocodingResult == null) return Collections.emptyList();
 
-        double lat = g.getLatitude();
-        double lon = g.getLongitude();
+        double lat = geocodingResult.getLatitude();
+        double lon = geocodingResult.getLongitude();
 
-        return HtsRecordMapper.toDtoList(htsRecordQueryService.findNearbyRecords(gsmNumbers, startTime, endTime, lat, lon, distance));
+        return HtsRecordMapper.toDtoList(
+                htsRecordQueryService.findNearbyRecords(gsmNumbers, startTime, endTime, lat, lon, distance)
+        );
+    }
+
+    public List<HtsRecordGroupedDto> findNearbyBazRecordsGrouped(String address, List<String> gsmNumbers, int distance,
+            LocalDateTime startTime, LocalDateTime endTime) {
+        List<HtsRecordDto> rawRecords = findNearbyBazRecords(address, gsmNumbers, distance, startTime, endTime);
+        if (rawRecords.isEmpty()) return Collections.emptyList();
+
+        Map<NearbyBazKey, List<HtsRecordDto>> groupedByGsmAndLocation = rawRecords.stream()
+                .collect(Collectors.groupingBy(
+                        this::toNearbyBazKey,
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+
+        return groupedByGsmAndLocation.values().stream()
+                .map(this::toGroupedDtoWithTimelines)
+                .sorted(Comparator
+                        .comparing(HtsRecordGroupedDto::getGsmNumber, Comparator.nullsLast(String::compareTo))
+                        .thenComparing(HtsRecordGroupedDto::getTotalRecordCount, Comparator.reverseOrder())
+                        .thenComparing(HtsRecordGroupedDto::getFirstSeen, Comparator.nullsLast(LocalDateTime::compareTo))
+                )
+                .toList();
+    }
+
+    private NearbyBazKey toNearbyBazKey(HtsRecordDto dto) {
+        String gsmNumber = dto.getGsmNumber();
+
+        String locationKey = StringUtils.isNotBlank(dto.getBaseStationId())
+                ? "BS:" + dto.getBaseStationId()
+                : "AD:" + normalizeAddress(dto.getAddress());
+
+        return new NearbyBazKey(gsmNumber, locationKey);
+    }
+
+    private HtsRecordGroupedDto toGroupedDtoWithTimelines(List<HtsRecordDto> group) {
+        HtsRecordDto sample = group.getFirst();
+
+        List<RecordTypeTimelineDto> timelines = group.stream()
+                .collect(Collectors.groupingBy(
+                        dto -> StringUtils.defaultIfBlank(dto.getRecordType(), "UNKNOWN"),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ))
+                .entrySet().stream()
+                .map(entry -> toTimeline(entry.getKey(), entry.getValue()))
+                .sorted(Comparator.comparing(RecordTypeTimelineDto::getRecordType))
+                .toList();
+
+        LocalDateTime firstSeen = timelines.stream()
+                .map(RecordTypeTimelineDto::getFirstSeen)
+                .filter(Objects::nonNull)
+                .min(LocalDateTime::compareTo)
+                .orElse(null);
+
+        LocalDateTime lastSeen = timelines.stream()
+                .map(RecordTypeTimelineDto::getLastSeen)
+                .filter(Objects::nonNull)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+
+        return HtsRecordGroupedDto.builder()
+                .gsmNumber(sample.getGsmNumber())
+                .baseStationId(sample.getBaseStationId())
+                .operator(sample.getOperator())
+                .address(sample.getAddress())
+                .city(sample.getCity())
+                .district(sample.getDistrict())
+                .latitude(sample.getLatitude())
+                .longitude(sample.getLongitude())
+                .totalRecordCount(group.size())
+                .firstSeen(firstSeen)
+                .lastSeen(lastSeen)
+                .timelines(timelines)
+                .build();
+    }
+
+    private RecordTypeTimelineDto toTimeline(String recordType, List<HtsRecordDto> records) {
+        List<LocalDateTime> times = records.stream()
+                .map(HtsRecordDto::getRecordDatetime)
+                .filter(Objects::nonNull)
+                .sorted()
+                .toList();
+
+        LocalDateTime firstSeen = times.isEmpty() ? null : times.get(0);
+        LocalDateTime lastSeen = times.isEmpty() ? null : times.get(times.size() - 1);
+
+        return RecordTypeTimelineDto.builder()
+                .recordType(recordType)
+                .recordCount(records.size())
+                .firstSeen(firstSeen)
+                .lastSeen(lastSeen)
+                .recordDatetimes(times)
+                .build();
+    }
+
+    private String normalizeAddress(String address) {
+        if (StringUtils.isBlank(address)) return "";
+        return address.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
     }
 
     public CommonContactResponse findCommonContacts(String gsm1, String gsm2) {
@@ -81,6 +231,7 @@ public class HtsAnalyseService {
             if (!GsmValidator.isValid(commonGsm)) {
                 continue;
             }
+
             List<HtsRecordEntity> gsm1Records = map1.getOrDefault(commonGsm, List.of());
             List<HtsRecordEntity> gsm2Records = map2.getOrDefault(commonGsm, List.of());
 
@@ -110,15 +261,18 @@ public class HtsAnalyseService {
         return common;
     }
 
-    private List<HtsAnalyseDto> cretaeHtsAnalyseDtoList(Map<Long, List<HtsRecordEntity>> recordsMap, List<HtsRecordEntity> recordEntities, int distance) {
+    private List<HtsAnalyseDto> cretaeHtsAnalyseDtoList(Map<Long, List<HtsRecordEntity>> recordsMap,
+            List<HtsRecordEntity> recordEntities, int distance) {
         List<HtsAnalyseDto> htsAnalyseDtoList = new ArrayList<>();
-        for(HtsRecordEntity htsRecordEntity : recordEntities){
+
+        for (HtsRecordEntity htsRecordEntity : recordEntities) {
             List<HtsRecordEntity> otherRecordEntities = recordsMap.get(htsRecordEntity.getId());
-            if(otherRecordEntities != null) {
+            if (otherRecordEntities != null) {
                 for (HtsRecordEntity otherHtsRecordEntity : otherRecordEntities) {
                     htsAnalyseDtoList.add(HtsAnalyseDto.builder()
                             .baseGsmNumber(htsRecordEntity.getGsmNumber())
-                            .distance(GeoUtils.calculateDistance(htsRecordEntity.getLatitude(), htsRecordEntity.getLongitude(),
+                            .distance(GeoUtils.calculateDistance(
+                                    htsRecordEntity.getLatitude(), htsRecordEntity.getLongitude(),
                                     otherHtsRecordEntity.getLatitude(), otherHtsRecordEntity.getLongitude()))
                             .baseGsmDateTime(htsRecordEntity.getRecordDatetime())
                             .otherGsmAddress(otherHtsRecordEntity.getAddress())
@@ -139,36 +293,37 @@ public class HtsAnalyseService {
         return filterListByDistance(htsAnalyseDtoList, distance);
     }
 
-    private List<HtsAnalyseDto> filterListByDistance(List<HtsAnalyseDto> htsAnalyseDtoList, int distance){
+    private List<HtsAnalyseDto> filterListByDistance(List<HtsAnalyseDto> htsAnalyseDtoList, int distance) {
         Predicate<HtsAnalyseDto> isFartherThanDistance = dto -> dto.getDistance() <= distance;
         return htsAnalyseDtoList.stream()
                 .filter(isFartherThanDistance)
                 .toList();
     }
 
-    private List<HtsRecordEntity> findHtsRecordsByGsmNumber(String gsmNumber, LocalDate startDate, LocalDate endDate){
+    private List<HtsRecordEntity> findHtsRecordsByGsmNumber(String gsmNumber, LocalDateTime startDate, LocalDateTime endDate) {
         if (startDate != null && endDate != null) {
             return htsRecordQueryService.findAllByGsmNumberAndRecordDatetimeBetween(
-                    gsmNumber, startDate.atStartOfDay(), endDate.atTime(LocalTime.MAX));
+                    gsmNumber, startDate, endDate);
         } else if (startDate != null) {
             return htsRecordQueryService.findAllByGsmNumberAndRecordDatetimeAfter(
-                    gsmNumber, startDate.atStartOfDay());
+                    gsmNumber, startDate);
         } else if (endDate != null) {
             return htsRecordQueryService.findAllByGsmNumberAndRecordDatetimeBefore(
-                    gsmNumber, endDate.atTime(LocalTime.MAX));
+                    gsmNumber, endDate);
         } else {
             return htsRecordQueryService.findAllByGsmNumber(gsmNumber);
         }
     }
 
-    private List<HtsRecordEntity> findHtsRecordsByGsmNumberAndRecordTimeAndDistance(List<String> compareGsmNumbers, LocalDateTime recordTime, int minute,
-            Double latitude, Double longitude, int distance){
+    private List<HtsRecordEntity> findHtsRecordsByGsmNumberAndRecordTimeAndDistance(List<String> compareGsmNumbers,
+            LocalDateTime recordTime, int minute,
+            Double latitude, Double longitude, int distance) {
         LocalDateTime startTime = recordTime.minusMinutes(minute);
         LocalDateTime endTime = recordTime.plusMinutes(minute);
-        return htsRecordQueryService.findNearbyRecords(compareGsmNumbers, startTime, endTime, latitude, longitude,distance);
+        return htsRecordQueryService.findNearbyRecords(compareGsmNumbers, startTime, endTime, latitude, longitude, distance);
     }
 
-    public List<Object[]> findLastNamesWithCount(String baseGsmNumber){
+    public List<Object[]> findLastNamesWithCount(String baseGsmNumber) {
         return htsRecordQueryService.findLastNamesWithCount(baseGsmNumber);
     }
 

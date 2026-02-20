@@ -3,7 +3,7 @@ package com.hts_analyse.helper;
 import com.hts_analyse.model.dto.GroupedResult;
 import com.hts_analyse.model.dto.HtsAnalyseDto;
 import com.hts_analyse.model.dto.DayGroup;
-import com.hts_analyse.model.record.GroupKey;
+import com.hts_analyse.model.record.HtsAnalyseStationKey;
 import com.hts_analyse.model.record.PairGroup;
 import java.time.Duration;
 import lombok.experimental.UtilityClass;
@@ -19,7 +19,7 @@ public class HtsAnalyseGrouper {
 
     public List<GroupedResult> groupByStationsAndDay(List<HtsAnalyseDto> items) {
         return items.stream()
-                .collect(Collectors.groupingBy(GroupKey::from))
+                .collect(Collectors.groupingBy(HtsAnalyseStationKey::from))
                 .values()
                 .stream()
                 .map(HtsAnalyseGrouper::buildGroupedResult)

@@ -2,6 +2,8 @@ package com.hts_analyse.service;
 
 import com.hts_analyse.model.dto.BaseStationDto;
 import com.hts_analyse.model.dto.ExcelRecord;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.util.IOUtils;
@@ -220,23 +222,42 @@ public class ExcelReaderService {
 
     private BaseStationDto parseBaseStation(String raw) {
         if (raw == null || raw.isBlank()) {
-            return new BaseStationDto("", "", "");
+            return BaseStationDto.builder().build();
         }
 
-        try {
-            String[] parts = raw.split(" - ");
-            String id = parts.length > 0 ? parts[0].trim() : "";
-            String operator = parts.length > 1 ? parts[1].trim() : "";
-            String address = parts.length > 2 ? parts[2].trim() : "";
+        String cleaned = raw.trim();
 
-            return BaseStationDto.builder()
-                    .baseStationId(id)
-                    .operator(operator)
-                    .address(address)
-                    .build();
-        } catch (Exception e) {
-            log.error("parse edilemeyen string: {}", raw);
-            return null;
+        Double latitude = null;
+        Double longitude = null;
+
+        // ---- LAT / LON YAKALA (sondan) ----
+        // Örnek: ", 41.0392- 28.5485"
+        Pattern latLonPattern = Pattern.compile(
+                ",\\s*([0-9]+\\.[0-9]+)\\s*-\\s*([0-9]+\\.[0-9]+)\\s*$"
+        );
+
+        Matcher matcher = latLonPattern.matcher(cleaned);
+        if (matcher.find()) {
+            latitude = Double.valueOf(matcher.group(1));
+            longitude = Double.valueOf(matcher.group(2));
+
+            // lat-lon kısmını stringden düş
+            cleaned = cleaned.substring(0, matcher.start()).trim();
         }
+
+        // ---- KALAN KISMI PARSE ET ----
+        String[] parts = cleaned.split(" - ", 3);
+
+        String id = parts.length > 0 ? parts[0].trim() : "";
+        String operator = parts.length > 1 ? parts[1].trim() : "";
+        String address = parts.length > 2 ? parts[2].trim() : "";
+
+        return BaseStationDto.builder()
+                .baseStationId(id)
+                .operator(operator)
+                .address(address)
+                .latitude(latitude)
+                .longitude(longitude)
+                .build();
     }
 }

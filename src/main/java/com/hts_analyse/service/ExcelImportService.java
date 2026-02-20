@@ -3,17 +3,24 @@ package com.hts_analyse.service;
 import com.hts_analyse.cache.BaseStationInfoCache;
 import com.hts_analyse.entity.BaseStationInfoEntity;
 import com.hts_analyse.entity.HtsRecordEntity;
+import com.hts_analyse.model.dto.BaseStationDto;
 import com.hts_analyse.model.dto.ExcelRecord;
 import com.hts_analyse.model.dto.GeocodingResult;
-import com.hts_analyse.model.dto.Location;
+import com.hts_analyse.model.record.BaseStationCandidate;
 import com.hts_analyse.repository.BaseStationInfoRepository;
-import com.hts_analyse.repository.HtsRecordRepository;
-import com.hts_analyse.util.DateUtil;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,85 +35,200 @@ public class ExcelImportService {
 
     private final ExcelReaderService excelReaderService;
     private final GeocodingService geocodingService;
-    private final HtsRecordRepository htsRecordRepository;
-    private final NominatimGeocoder nominatimGeocoder;
-    private final GeoapifyGeocoderService geoapifyGeocoderService;
     private final BaseStationInfoCache baseStationInfoCache;
     private final BaseStationInfoRepository baseStationInfoRepository;
+    private final HtsBatchWriter htsBatchWriter;
+    private final HtsRecordBuildHelper htsRecordBuildHelper;
 
     @Value("${hts.analyse.interval-minutes}")
     private int intervalMinutes;
 
-    public void importExcel(String filePath, boolean shouldAnalyseHts, boolean shouldFilterHtsRecords ) {
+    public void importExcel(String filePath, boolean shouldAnalyseHts, boolean shouldFilterHtsRecords) {
         List<ExcelRecord> excelRecords = excelReaderService.readFullExcel(filePath);
-        List<ExcelRecord> filteredExcelRecords = shouldFilterHtsRecords ? filterUniquePerNDuration(excelRecords) : excelRecords;
+        List<ExcelRecord> filteredExcelRecords =
+                shouldFilterHtsRecords ? filterUniquePerNDuration(excelRecords) : excelRecords;
 
         AtomicInteger geoLocationApiUsage = new AtomicInteger();
 
+        if (shouldAnalyseHts) {
+            Map<String, String> addressKeyToAddress = collectGeocodeAddressCandidates(filteredExcelRecords);
+            Map<String, GeocodingResult> geoByAddressKey = runGeocodingInParallel(addressKeyToAddress, geoLocationApiUsage);
+            persistBaseStationInfosSingleThread(filteredExcelRecords, geoByAddressKey);
+        }
+
+        persistHtsRecordsSingleThread(filteredExcelRecords, shouldAnalyseHts);
+
+        log.info("geoLocationApiUsage : {}", geoLocationApiUsage.get());
+    }
+
+    private Map<String, String> collectGeocodeAddressCandidates(List<ExcelRecord> filteredExcelRecords) {
+        Map<String, String> addressKeyToAddress = new LinkedHashMap<>();
+
+        for (ExcelRecord excelRecord : filteredExcelRecords) {
+            BaseStationCandidate baseStationCandidate = toBaseStationCandidate(excelRecord);
+            if (baseStationCandidate == null) continue;
+
+            if (baseStationCandidate.hasCoordinates()) continue;
+
+            if (baseStationInfoCache.contains(baseStationCandidate.baseStationId())) continue;
+
+            addressKeyToAddress.putIfAbsent(baseStationCandidate.addressKey(), baseStationCandidate.address());
+        }
+
+        return addressKeyToAddress;
+    }
+
+    private Map<String, GeocodingResult> runGeocodingInParallel(Map<String, String> addressKeyToAddress, AtomicInteger geoLocationApiUsage) {
+        if (addressKeyToAddress.isEmpty()) return Map.of();
+
+        Semaphore semaphore = new Semaphore(20);
+        Map<String, GeocodingResult> geoByAddressKey = new ConcurrentHashMap<>();
+
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Callable<Void>> tasks = addressKeyToAddress.entrySet().stream()
+                    .map(entry -> (Callable<Void>) () -> {
+                        semaphore.acquire();
+                        try {
+                            GeocodingResult geocodingResult = geocodingService.geocode(entry.getValue());
+                            if (geocodingResult != null) {
+                                geoByAddressKey.put(entry.getKey(), geocodingResult);
+                                geoLocationApiUsage.incrementAndGet();
+                            }
+                            return null;
+                        } catch (Exception e) {
+                            log.warn("Geocode failed. address={}", entry.getValue(), e);
+                            return null;
+                        } finally {
+                            semaphore.release();
+                        }
+                    })
+                    .toList();
+
+            executor.invokeAll(tasks);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Geocoding interrupted", ie);
+        }
+
+        return geoByAddressKey;
+    }
+
+    private void persistBaseStationInfosSingleThread(
+            List<ExcelRecord> filteredExcelRecords,
+            Map<String, GeocodingResult> geoByAddressKey
+    ) {
+        List<BaseStationInfoEntity> baseStationInfoEntities = new ArrayList<>();
+        Set<String> processedBaseStationIds = new HashSet<>();
+
+        for (ExcelRecord excelRecord : filteredExcelRecords) {
+            BaseStationCandidate baseStationCandidate = toBaseStationCandidate(excelRecord);
+            if (baseStationCandidate == null) continue;
+
+            if (shouldSkipBaseStationCandidate(baseStationCandidate, processedBaseStationIds)) continue;
+
+            GeocodingResult geocodingResult = geoByAddressKey.get(baseStationCandidate.addressKey());
+            if (geocodingResult == null) continue;
+
+            BaseStationInfoEntity baseStationInfoEntity =
+                    buildBaseStationInfoEntity(baseStationCandidate.baseStationId(), baseStationCandidate.address(), geocodingResult);
+
+            baseStationInfoEntities.add(baseStationInfoEntity);
+        }
+
+        if (baseStationInfoEntities.isEmpty()) return;
+
+        baseStationInfoRepository.saveAll(baseStationInfoEntities);
+        updateBaseStationCache(baseStationInfoEntities);
+    }
+
+    private boolean shouldSkipBaseStationCandidate(BaseStationCandidate baseStationCandidate, Set<String> processedBaseStationIds) {
+        if (baseStationInfoCache.contains(baseStationCandidate.baseStationId())) return true;
+        return !processedBaseStationIds.add(baseStationCandidate.baseStationId());
+    }
+
+    private BaseStationInfoEntity buildBaseStationInfoEntity(
+            String baseStationId,
+            String address,
+            GeocodingResult geocodingResult
+    ) {
+        return BaseStationInfoEntity.builder()
+                .baseStationId(baseStationId)
+                .address(address)
+                .city(geocodingResult.getCity())
+                .district(geocodingResult.getDistrict())
+                .latitude(geocodingResult.getLatitude())
+                .longitude(geocodingResult.getLongitude())
+                .build();
+    }
+
+    private void updateBaseStationCache(List<BaseStationInfoEntity> baseStationInfoEntities) {
+        Map<String, BaseStationInfoEntity> baseStationMap = baseStationInfoCache.getBaseStationMap();
+        for (BaseStationInfoEntity baseStationInfoEntity : baseStationInfoEntities) {
+            baseStationMap.put(baseStationInfoEntity.getBaseStationId(), baseStationInfoEntity);
+        }
+    }
+
+    private void persistHtsRecordsSingleThread(List<ExcelRecord> filteredExcelRecords, boolean shouldAnalyseHts) {
+        int batchSize = 200;
+        List<HtsRecordEntity> htsRecordEntities = new ArrayList<>(batchSize);
+
         for (ExcelRecord excelRecord : filteredExcelRecords) {
             try {
-                if (StringUtils.isBlank(excelRecord.getBaseStation().getAddress())) {
-                    continue;
+                HtsRecordEntity htsRecordEntity = htsRecordBuildHelper.buildHtsRecordEntity(excelRecord, shouldAnalyseHts);
+                if (htsRecordEntity == null) continue;
+
+                htsRecordEntities.add(htsRecordEntity);
+
+                if (htsRecordEntities.size() >= batchSize) {
+                    persistHtsBatch(htsRecordEntities);
                 }
-
-                String baseStationId = excelRecord.getBaseStation().getBaseStationId();
-                BaseStationInfoEntity stationInfo = null;
-
-                if(shouldAnalyseHts) {
-                    stationInfo = baseStationInfoCache.getBaseStationMap()
-                            .computeIfAbsent(baseStationId, id -> {
-                                GeocodingResult g = geocodingService.geocode(excelRecord.getBaseStation().getAddress());
-                                if (g == null) {
-                                    return null;
-                                }
-                                geoLocationApiUsage.getAndIncrement();
-
-                                BaseStationInfoEntity entity = BaseStationInfoEntity.builder()
-                                        .baseStationId(id)
-                                        .address(excelRecord.getBaseStation().getAddress())
-                                        .city(g.getCity())
-                                        .district(g.getDistrict())
-                                        .latitude(g.getLatitude())
-                                        .longitude(g.getLongitude())
-                                        .build();
-
-                                baseStationInfoRepository.save(entity);
-                                return entity;
-                            });
-
-                    if (stationInfo == null) {
-                        continue;
-                    }
-                }
-
-                HtsRecordEntity hts = HtsRecordEntity.builder()
-                        .gsmNumber(excelRecord.getGsmNumber())
-                        .recordType(excelRecord.getRecordType())
-                        .otherNumber(excelRecord.getOtherNumber())
-                        .recordDatetime(DateUtil.convertStringToLocalDateTime(excelRecord.getRecordTime()))
-                        .fullName(excelRecord.getFullName())
-                        .baseStationId(baseStationId)
-                        .operator(excelRecord.getBaseStation().getOperator())
-                        .address(stationInfo != null ? stationInfo.getAddress() : "")
-                        .city(stationInfo != null ? stationInfo.getCity() : "")
-                        .district(stationInfo != null ? stationInfo.getDistrict() : "")
-                        .latitude(stationInfo != null ? stationInfo.getLatitude() : Double.valueOf(1))
-                        .longitude(stationInfo != null ? stationInfo.getLongitude() : Double.valueOf(1))
-                        .imei(excelRecord.getImei())
-                        .identityNo(excelRecord.getIdentityNo())
-                        .build();
-
-                htsRecordRepository.save(hts);
             } catch (Exception e) {
                 log.info("Kayıt işlenirken hata oluştu. ExcelRecord : {}", excelRecord, e);
             }
         }
-        log.info("geoLocationApiUsage : {}", geoLocationApiUsage.get());
+
+        if (!htsRecordEntities.isEmpty()) {
+            persistHtsBatch(htsRecordEntities);
+        }
+    }
+
+    private void persistHtsBatch(List<HtsRecordEntity> htsRecordEntities) {
+        htsBatchWriter.saveBatch(htsRecordEntities);
+        htsRecordEntities.clear();
+    }
+
+    private BaseStationCandidate toBaseStationCandidate(ExcelRecord excelRecord) {
+        if (excelRecord == null) return null;
+
+        BaseStationDto dto = excelRecord.getBaseStation();
+        if (dto == null) return null;
+
+        if (StringUtils.isBlank(dto.getBaseStationId())
+                || StringUtils.isBlank(dto.getAddress())) {
+            return null;
+        }
+
+        String addressKey = normalizeAddress(dto.getAddress());
+        if (StringUtils.isBlank(addressKey)) return null;
+
+        return new BaseStationCandidate(
+                dto.getBaseStationId(),
+                dto.getAddress(),
+                addressKey,
+                dto.getLatitude(),
+                dto.getLongitude()
+        );
+    }
+
+    private static String normalizeAddress(String address) {
+        if (StringUtils.isBlank(address)) return "";
+        return address.trim()
+                .replaceAll("\\s+", " ")
+                .toLowerCase(Locale.ROOT);
     }
 
     private List<ExcelRecord> filterUniquePerNDuration(List<ExcelRecord> records) {
         DateTimeFormatter inputFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss");
-
         Map<String, ExcelRecord> uniqueByInterval = new LinkedHashMap<>();
 
         for (ExcelRecord excelRecord : records) {
@@ -119,9 +241,14 @@ public class ExcelImportService {
                         .withSecond(0)
                         .withNano(0);
 
-                String key = roundedTime + "_" + excelRecord.getBaseStation().getBaseStationId(); // örneğin: 2024-06-12T14:35
-                uniqueByInterval.putIfAbsent(key, excelRecord);
+                String baseStationId = "";
+                BaseStationDto baseStationDto = excelRecord.getBaseStation();
+                if (baseStationDto != null && StringUtils.isNotBlank(baseStationDto.getBaseStationId())) {
+                    baseStationId = baseStationDto.getBaseStationId();
+                }
 
+                String key = roundedTime + "_" + baseStationId;
+                uniqueByInterval.putIfAbsent(key, excelRecord);
             } catch (Exception e) {
                 log.warn("Geçersiz tarih formatı: {}", excelRecord.getRecordTime());
             }
@@ -129,33 +256,4 @@ public class ExcelImportService {
 
         return List.copyOf(uniqueByInterval.values());
     }
-
-    public String checkFreeApi(String address){
-        try {
-            Location location = nominatimGeocoder.geocode(address);
-            if(location != null && StringUtils.isNotBlank(location.getCity()) && StringUtils.isNotBlank(location.getState())) {
-                return "city: " + location.getCity() + "--  district: " +location.getState() + "--- latitude: " + location.getLat()
-                        + "-----   longitude: " + location.getLon();
-            }
-            return "Record not found";
-        } catch (Exception e) {
-            log.warn("Kayıt işlenirken hata oluştu: {}", address, e);
-            return "Kayıt işlenirken hata oluştu: {}";
-        }
-    }
-
-    public String checkByGeoapify(String address){
-        try {
-            Location location = geoapifyGeocoderService.geocode(address);
-            if(location != null && StringUtils.isNotBlank(location.getCity()) && StringUtils.isNotBlank(location.getState())) {
-                return "city: " + location.getCity() + "--  district: " +location.getState() + "--- latitude: " + location.getLat()
-                        + "-----   longitude: " + location.getLon();
-            }
-            return "Record not found";
-        } catch (Exception e) {
-            log.warn("Kayıt işlenirken hata oluştu: {}", address, e);
-            return "Kayıt işlenirken hata oluştu: {}";
-        }
-    }
-    
 }

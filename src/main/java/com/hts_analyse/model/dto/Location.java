@@ -6,8 +6,8 @@ import lombok.Data;
 public class Location {
 
         private String displayName;
-        private double lat;
-        private double lon;
+        private double latitude;
+        private double longitude;
         private String city;    // ilçe
         private String state;   // il
 }

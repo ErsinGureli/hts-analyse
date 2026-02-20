@@ -13,7 +13,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.configurationprocessor.json.JSONArray;
 import org.springframework.boot.configurationprocessor.json.JSONObject;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
 
 @Service
 @Slf4j
@@ -61,8 +60,8 @@ public class GeoapifyGeocoderService {
 
             Location loc = new Location();
             loc.setDisplayName(props.getString("formatted"));
-            loc.setLat(props.getDouble("lat"));
-            loc.setLon(props.getDouble("lon"));
+            loc.setLatitude(props.getDouble("lat"));
+            loc.setLongitude(props.getDouble("lon"));
             loc.setCity(props.optString("city", props.optString("county", "")));
             loc.setState(props.optString("state", ""));
             return loc;

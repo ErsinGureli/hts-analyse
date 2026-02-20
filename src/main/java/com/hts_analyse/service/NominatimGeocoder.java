@@ -41,8 +41,8 @@ public class NominatimGeocoder {
         JSONObject obj = arr.getJSONObject(0); // en iyi eşleşme
         Location loc = new Location();
         loc.setDisplayName(obj.getString("display_name"));
-        loc.setLat(obj.getDouble("lat"));
-        loc.setLon(obj.getDouble("lon"));
+        loc.setLatitude(obj.getDouble("lat"));
+        loc.setLongitude(obj.getDouble("lon"));
 
         JSONObject jsonAddress = obj.getJSONObject("address");
 

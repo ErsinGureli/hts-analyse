@@ -13,4 +13,6 @@ public class BaseStationDto {
     private String baseStationId;
     private String operator;
     private String address;
+    private Double latitude;
+    private Double longitude;
 }
