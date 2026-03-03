@@ -114,6 +114,9 @@ public class HtsAnalyseService {
 
         double lat = geocodingResult.getLatitude();
         double lon = geocodingResult.getLongitude();
+     //   double lat = 37.83622031155518;//geocodingResult.getLatitude();
+     //   double lon = 27.848970126501168;//geocodingResult.getLongitude();
+
 
         return HtsRecordMapper.toDtoList(
                 htsRecordQueryService.findNearbyRecords(gsmNumbers, startTime, endTime, lat, lon, distance)

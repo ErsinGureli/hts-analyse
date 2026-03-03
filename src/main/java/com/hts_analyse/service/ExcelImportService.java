@@ -6,6 +6,7 @@ import com.hts_analyse.entity.HtsRecordEntity;
 import com.hts_analyse.model.dto.BaseStationDto;
 import com.hts_analyse.model.dto.ExcelRecord;
 import com.hts_analyse.model.dto.GeocodingResult;
+import com.hts_analyse.model.dto.GsmImeiDto;
 import com.hts_analyse.model.record.BaseStationCandidate;
 import com.hts_analyse.repository.BaseStationInfoRepository;
 import java.time.LocalDateTime;
@@ -26,22 +27,54 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.ParameterizedPreparedStatementSetter;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ExcelImportService {
 
+    private static final String GSM_IMEI_INSERT_SQL = """
+        INSERT INTO gsm_imei (gsm, imei)
+        VALUES (?, ?)
+        ON CONFLICT (gsm, imei) DO NOTHING
+        """;
+
     private final ExcelReaderService excelReaderService;
     private final GeocodingService geocodingService;
     private final BaseStationInfoCache baseStationInfoCache;
     private final BaseStationInfoRepository baseStationInfoRepository;
+    private final JdbcTemplate jdbcTemplate;
     private final HtsBatchWriter htsBatchWriter;
     private final HtsRecordBuildHelper htsRecordBuildHelper;
 
     @Value("${hts.analyse.interval-minutes}")
     private int intervalMinutes;
+
+    @Transactional
+    public List<GsmImeiDto> importGsmImei(String filePath){
+        List<GsmImeiDto> records = excelReaderService.readGsmImeiOnly(filePath);
+        if (records.isEmpty()) {
+            return records;
+        }
+
+        Set<String> seen = new HashSet<>();
+        List<GsmImeiDto> uniqueRecords = new ArrayList<>();
+
+        for (GsmImeiDto dto : records) {
+            String key = dto.getGsm() + "|" + dto.getImei();
+            if (seen.add(key)) {
+                uniqueRecords.add(dto);
+            }
+        }
+
+        insertGsmImeiBatch(uniqueRecords);
+
+        return records;
+    }
 
     public void importExcel(String filePath, boolean shouldAnalyseHts, boolean shouldFilterHtsRecords) {
         List<ExcelRecord> excelRecords = excelReaderService.readFullExcel(filePath);
@@ -194,7 +227,49 @@ public class ExcelImportService {
 
     private void persistHtsBatch(List<HtsRecordEntity> htsRecordEntities) {
         htsBatchWriter.saveBatch(htsRecordEntities);
+        persistGsmImeiBatch(htsRecordEntities);
         htsRecordEntities.clear();
+    }
+
+    private void persistGsmImeiBatch(List<HtsRecordEntity> htsRecordEntities) {
+        Set<String> seen = new HashSet<>();
+        List<GsmImeiDto> uniqueRecords = new ArrayList<>();
+
+        for (HtsRecordEntity entity : htsRecordEntities) {
+            String gsm = entity.getGsmNumber();
+            String imei = entity.getImei();
+            if (StringUtils.isBlank(gsm) || StringUtils.isBlank(imei)) {
+                continue;
+            }
+
+            String key = gsm + "|" + imei;
+            if (!seen.add(key)) {
+                continue;
+            }
+
+            uniqueRecords.add(GsmImeiDto.builder()
+                    .gsm(gsm)
+                    .imei(imei)
+                    .build());
+        }
+
+        insertGsmImeiBatch(uniqueRecords);
+    }
+
+    private void insertGsmImeiBatch(List<GsmImeiDto> records) {
+        if (records.isEmpty()) {
+            return;
+        }
+
+        jdbcTemplate.batchUpdate(
+                GSM_IMEI_INSERT_SQL,
+                records,
+                500,
+                (ParameterizedPreparedStatementSetter<GsmImeiDto>) (ps, record) -> {
+                    ps.setString(1, record.getGsm());
+                    ps.setString(2, record.getImei());
+                }
+        );
     }
 
     private BaseStationCandidate toBaseStationCandidate(ExcelRecord excelRecord) {

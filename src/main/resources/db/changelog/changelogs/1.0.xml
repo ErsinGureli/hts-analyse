@@ -66,4 +66,26 @@
     <modifyDataType tableName="hts_record" columnName="identity_no" newDataType="VARCHAR(100)"/>
   </changeSet>
 
+  <changeSet id="006-create-gsm-imei" author="ersin">
+    <createTable tableName="gsm_imei">
+      <column name="id" type="BIGSERIAL">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="gsm" type="VARCHAR(20)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="imei" type="VARCHAR(50)">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <addUniqueConstraint tableName="gsm_imei"
+      columnNames="gsm, imei"
+      constraintName="uq_gsm_imei"/>
+
+    <createIndex indexName="idx_gsm_imei_imei" tableName="gsm_imei">
+      <column name="imei"/>
+    </createIndex>
+  </changeSet>
+
 </databaseChangeLog>

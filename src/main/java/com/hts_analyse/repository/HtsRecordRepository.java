@@ -78,4 +78,37 @@ public interface HtsRecordRepository extends JpaRepository<HtsRecordEntity, Long
             @Param("gsmNumber") String gsmNumber,
             @Param("lastName") String lastName
     );
+
+    @Query(value = """
+        SELECT DISTINCT imei
+        FROM hts_record
+        WHERE gsm_number = :gsmNumber
+          AND imei IS NOT NULL
+          AND imei <> ''
+        """, nativeQuery = true)
+    List<String> findDistinctImeisByGsmNumber(@Param("gsmNumber") String gsmNumber);
+
+    @Query(value = """
+        SELECT imei, gsm_number
+        FROM hts_record
+        WHERE gsm_number IN (:gsmNumbers)
+          AND imei IS NOT NULL
+          AND imei <> ''
+        GROUP BY imei, gsm_number
+        """, nativeQuery = true)
+    List<Object[]> findDistinctGsmNumbersByImei(@Param("gsmNumbers") List<String> gsmNumbers);
+
+    @Query(value = """
+        SELECT imei, gsm_number
+        FROM hts_record
+        WHERE gsm_number IN (:gsmNumbers)
+          AND record_time BETWEEN :startTime AND :endTime
+          AND imei IS NOT NULL
+          AND imei <> ''
+        GROUP BY imei, gsm_number
+        """, nativeQuery = true)
+    List<Object[]> findDistinctGsmNumbersByImeiAndRecordTimeBetween(
+            @Param("gsmNumbers") List<String> gsmNumbers,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime);
 }

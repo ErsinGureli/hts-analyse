@@ -2,6 +2,7 @@ package com.hts_analyse.service;
 
 import com.hts_analyse.model.dto.BaseStationDto;
 import com.hts_analyse.model.dto.ExcelRecord;
+import com.hts_analyse.model.dto.GsmImeiDto;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
@@ -125,6 +126,81 @@ public class ExcelReaderService {
                             .build();
 
                     records.add(excelRecord);
+                } catch (Exception e) {
+                    log.warn("Satır okunamadı, atlanıyor. Hata: {}", e.getMessage());
+                }
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read Excel file: " + filePath, e);
+        }
+
+        return records;
+    }
+
+    // ----------------------------------------------------
+// SADE GSM + IMEI OKUMA
+// ----------------------------------------------------
+
+    public List<GsmImeiDto> readGsmImeiOnly(String filePath) {
+
+        List<GsmImeiDto> records = new ArrayList<>();
+        IOUtils.setByteArrayMaxOverride(200_000_000);
+
+        try (FileInputStream fis = new FileInputStream(filePath);
+                Workbook workbook = WorkbookFactory.create(fis)) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+
+            Map<String, Integer> columnIndexMap = new HashMap<>();
+            boolean headerFound = false;
+
+            for (Row row : sheet) {
+
+                if (!headerFound) {
+
+                    Map<String, Integer> tempMap = new HashMap<>();
+
+                    for (Cell cell : row) {
+                        String rawHeader = getCellValue(cell).trim();
+                        String normalized = normalize(rawHeader);
+                        tempMap.put(normalized, cell.getColumnIndex());
+                    }
+
+                    // HEADER doğrulaması
+                    if (tempMap.containsKey("SIRA NO")
+                            && tempMap.containsKey("NUMARA")
+                            && tempMap.containsKey("IMEI")) {
+
+                        columnIndexMap = tempMap;
+                        headerFound = true;
+                    }
+
+                    continue;
+                }
+
+                try {
+                    Integer gsmIdx = columnIndexMap.get("NUMARA");
+                    Integer imeiIdx = columnIndexMap.get("IMEI");
+
+                    if (gsmIdx == null || imeiIdx == null) continue;
+
+                    String gsm = getCellValue(row.getCell(gsmIdx)).trim();
+                    String imei = getCellValue(row.getCell(imeiIdx)).trim();
+
+                    // GSM boşsa skip
+                    if (gsm.isBlank()) continue;
+
+                    // IMEI 15 hane kontrolü
+                    if (!imei.matches("\\d{15}")) continue;
+
+                    records.add(
+                            GsmImeiDto.builder()
+                                    .gsm(gsm)
+                                    .imei(imei)
+                                    .build()
+                    );
+
                 } catch (Exception e) {
                     log.warn("Satır okunamadı, atlanıyor. Hata: {}", e.getMessage());
                 }

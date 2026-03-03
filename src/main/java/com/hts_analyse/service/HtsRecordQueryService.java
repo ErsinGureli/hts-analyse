@@ -65,4 +65,19 @@ public class HtsRecordQueryService {
     public List<Object[]> findFullNameIdentityNoWithCount(String gsmNumber, String lastName){
         return htsRecordRepository.findFullNameIdentityNoWithCount(gsmNumber, lastName);
     }
+
+    public List<String> findDistinctImeisByGsmNumber(String gsmNumber) {
+        return htsRecordRepository.findDistinctImeisByGsmNumber(gsmNumber);
+    }
+
+    public List<Object[]> findDistinctGsmNumbersByImei(List<String> gsmNumbers) {
+        return htsRecordRepository.findDistinctGsmNumbersByImei(gsmNumbers);
+    }
+
+    public List<Object[]> findDistinctGsmNumbersByImeiAndRecordTimeBetween(
+            List<String> gsmNumbers,
+            LocalDateTime startTime,
+            LocalDateTime endTime) {
+        return htsRecordRepository.findDistinctGsmNumbersByImeiAndRecordTimeBetween(gsmNumbers, startTime, endTime);
+    }
 }
