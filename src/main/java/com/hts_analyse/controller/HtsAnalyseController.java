@@ -3,6 +3,8 @@ package com.hts_analyse.controller;
 import com.hts_analyse.model.dto.GroupedResult;
 import com.hts_analyse.model.dto.HtsRecordGroupedDto;
 import com.hts_analyse.model.record.HtsPairsResponse;
+import com.hts_analyse.model.dto.MutualContactRecordDto;
+import com.hts_analyse.model.response.CommonContactMultiResponse;
 import com.hts_analyse.model.response.CommonContactResponse;
 import com.hts_analyse.service.CommonContactExcelService;
 import com.hts_analyse.service.GoogleMapPageRenderer;
@@ -125,6 +127,50 @@ public class HtsAnalyseController {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
         headers.setContentDisposition(ContentDisposition.attachment().filename("common_contacts_" + gsm1 + "_" + gsm2 + ".xlsx").build());
+
+        return ResponseEntity.ok().headers(headers).body(excelBytes);
+    }
+
+    @GetMapping("/common-contacts-as-excel-multi")
+    public ResponseEntity<byte[]> downloadCommonContactsExcelMulti(
+            @RequestParam List<String> gsmNumbers,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
+
+        CommonContactMultiResponse response = htsAnalyseService.findCommonContactsMulti(gsmNumbers, startTime, endTime);
+        byte[] excelBytes = commonContactExcelService.generateMultiExcel(response);
+
+        String filename = "common_contacts_" + String.join("_", gsmNumbers) + ".xlsx";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+        headers.setContentDisposition(ContentDisposition.attachment().filename(filename).build());
+
+        return ResponseEntity.ok().headers(headers).body(excelBytes);
+    }
+
+    @GetMapping("/mutual-contacts")
+    public ResponseEntity<List<MutualContactRecordDto>> getMutualContacts(
+            @RequestParam List<String> gsmNumbers,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
+        return ResponseEntity.ok(htsAnalyseService.findMutualContacts(gsmNumbers, startTime, endTime));
+    }
+
+    @GetMapping("/mutual-contacts-as-excel")
+    public ResponseEntity<byte[]> downloadMutualContactsExcel(
+            @RequestParam List<String> gsmNumbers,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
+
+        List<MutualContactRecordDto> records = htsAnalyseService.findMutualContacts(gsmNumbers, startTime, endTime);
+        byte[] excelBytes = commonContactExcelService.generateMutualContactsExcel(records);
+
+        String filename = "mutual_contacts_" + String.join("_", gsmNumbers) + ".xlsx";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+        headers.setContentDisposition(ContentDisposition.attachment().filename(filename).build());
 
         return ResponseEntity.ok().headers(headers).body(excelBytes);
     }

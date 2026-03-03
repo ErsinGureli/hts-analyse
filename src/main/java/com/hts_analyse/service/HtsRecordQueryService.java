@@ -36,6 +36,28 @@ public class HtsRecordQueryService {
                 gsmNumber, endTime);
     }
 
+    public List<HtsRecordEntity> findAllByGsmNumbersAndOtherNumbers(List<String> gsmNumbers){
+        return htsRecordRepository.findAllByGsmNumberInAndOtherNumberIn(gsmNumbers, gsmNumbers);
+    }
+
+    public List<HtsRecordEntity> findAllByGsmNumbersAndOtherNumbersBetween(
+            List<String> gsmNumbers, LocalDateTime start, LocalDateTime end) {
+        return htsRecordRepository.findAllByGsmNumberInAndOtherNumberInAndRecordDatetimeBetween(
+                gsmNumbers, gsmNumbers, start, end);
+    }
+
+    public List<HtsRecordEntity> findAllByGsmNumbersAndOtherNumbersAfter(
+            List<String> gsmNumbers, LocalDateTime start) {
+        return htsRecordRepository.findAllByGsmNumberInAndOtherNumberInAndRecordDatetimeAfter(
+                gsmNumbers, gsmNumbers, start);
+    }
+
+    public List<HtsRecordEntity> findAllByGsmNumbersAndOtherNumbersBefore(
+            List<String> gsmNumbers, LocalDateTime end) {
+        return htsRecordRepository.findAllByGsmNumberInAndOtherNumberInAndRecordDatetimeBefore(
+                gsmNumbers, gsmNumbers, end);
+    }
+
     public List<Object[]> findLastNamesWithCount(@Param("gsmNumber") String gsmNumber){
         return htsRecordRepository.findLastNamesWithCount(gsmNumber);
     }

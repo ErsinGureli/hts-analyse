@@ -19,6 +19,17 @@ public interface HtsRecordRepository extends JpaRepository<HtsRecordEntity, Long
 
     List<HtsRecordEntity> findAllByGsmNumberAndRecordDatetimeBefore(String gsmNumber, LocalDateTime end);
 
+    List<HtsRecordEntity> findAllByGsmNumberInAndOtherNumberIn(List<String> gsmNumbers, List<String> otherNumbers);
+
+    List<HtsRecordEntity> findAllByGsmNumberInAndOtherNumberInAndRecordDatetimeBetween(
+            List<String> gsmNumbers, List<String> otherNumbers, LocalDateTime start, LocalDateTime end);
+
+    List<HtsRecordEntity> findAllByGsmNumberInAndOtherNumberInAndRecordDatetimeAfter(
+            List<String> gsmNumbers, List<String> otherNumbers, LocalDateTime start);
+
+    List<HtsRecordEntity> findAllByGsmNumberInAndOtherNumberInAndRecordDatetimeBefore(
+            List<String> gsmNumbers, List<String> otherNumbers, LocalDateTime end);
+
     @Query(value = """
     SELECT *
     FROM hts_record

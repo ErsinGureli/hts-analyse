@@ -51,14 +51,14 @@ public class ExcelController {
             @RequestParam boolean shouldAnalyseHts,
             @RequestParam boolean shouldFilterHtsRecords) {
         excelImportService.importExcel(filePath ,shouldAnalyseHts, shouldFilterHtsRecords);
-        return ResponseEntity.ok("success");
+        return ResponseEntity.ok("SUCCESS");
     }
 
 
   /*  @PostMapping("/importExcelWithFreeAPI")
     public ResponseEntity<String> importExcelWithFreeApi(@RequestParam String filePath) {
         excelImportService.importExcelTests(filePath);
-        return ResponseEntity.ok("success");
+        return ResponseEntity.ok("SUCCESS");
     }
 
     @PostMapping("/checkFreeApi")

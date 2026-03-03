@@ -5,16 +5,19 @@ import com.hts_analyse.helper.HtsAnalyseGrouper;
 import com.hts_analyse.mapper.HtsAnalyseMapper;
 import com.hts_analyse.mapper.HtsRecordMapper;
 import com.hts_analyse.model.dto.CommonContactDto;
+import com.hts_analyse.model.dto.CommonContactMultiShortDto;
 import com.hts_analyse.model.dto.CommonContactShortDto;
 import com.hts_analyse.model.dto.GeocodingResult;
 import com.hts_analyse.model.dto.GroupedResult;
 import com.hts_analyse.model.dto.HtsAnalyseDto;
 import com.hts_analyse.model.dto.HtsRecordDto;
 import com.hts_analyse.model.dto.HtsRecordGroupedDto;
+import com.hts_analyse.model.dto.MutualContactRecordDto;
 import com.hts_analyse.model.dto.RecordTypeTimelineDto;
 import com.hts_analyse.model.record.HtsPairsResponse;
 import com.hts_analyse.model.record.NearbyBazKey;
 import com.hts_analyse.model.record.PairKey;
+import com.hts_analyse.model.response.CommonContactMultiResponse;
 import com.hts_analyse.model.response.CommonContactResponse;
 import com.hts_analyse.util.GeoUtils;
 import com.hts_analyse.util.GsmValidator;
@@ -247,6 +250,170 @@ public class HtsAnalyseService {
                 .commonCommunications(shortList)
                 .commonContacts(details)
                 .build();
+    }
+
+    public CommonContactMultiResponse findCommonContactsMulti(
+            List<String> gsmNumbers,
+            LocalDateTime startTime,
+            LocalDateTime endTime) {
+        if (gsmNumbers == null || gsmNumbers.size() < 2) {
+            return CommonContactMultiResponse.builder()
+                    .totalCommonCount(0)
+                    .commonCommunications(List.of())
+                    .build();
+        }
+
+        List<String> normalizedGsms = gsmNumbers.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .distinct()
+                .toList();
+
+        Map<String, Map<String, List<HtsRecordEntity>>> contactToGsmRecords = new HashMap<>();
+
+        for (String gsm : normalizedGsms) {
+            List<HtsRecordEntity> records;
+            if (startTime != null && endTime != null) {
+                records = htsRecordQueryService.findAllByGsmNumberAndRecordDatetimeBetween(gsm, startTime, endTime);
+            } else if (startTime != null) {
+                records = htsRecordQueryService.findAllByGsmNumberAndRecordDatetimeAfter(gsm, startTime);
+            } else if (endTime != null) {
+                records = htsRecordQueryService.findAllByGsmNumberAndRecordDatetimeBefore(gsm, endTime);
+            } else {
+                records = htsRecordQueryService.findAllByGsmNumber(gsm);
+            }
+            Map<String, List<HtsRecordEntity>> byOther = groupByOtherNumber(records);
+            for (Map.Entry<String, List<HtsRecordEntity>> entry : byOther.entrySet()) {
+                String other = entry.getKey();
+                if (!GsmValidator.isValid(other)) {
+                    continue;
+                }
+                contactToGsmRecords
+                        .computeIfAbsent(other, k -> new HashMap<>())
+                        .put(gsm, entry.getValue());
+            }
+        }
+
+        List<CommonContactMultiShortDto> list = new ArrayList<>();
+
+        for (Map.Entry<String, Map<String, List<HtsRecordEntity>>> entry : contactToGsmRecords.entrySet()) {
+            Map<String, List<HtsRecordEntity>> gsmMap = entry.getValue();
+            if (gsmMap.size() < 2) {
+                continue;
+            }
+            if (!entry.getKey().startsWith("5")) {
+                continue;
+            }
+
+            String commonGsms = normalizedGsms.stream()
+                    .filter(gsmMap::containsKey)
+                    .collect(Collectors.joining("_"));
+
+            List<HtsRecordEntity> allRecords = gsmMap.values().stream()
+                    .flatMap(List::stream)
+                    .toList();
+
+            String identityNo = null;
+            String fullName = null;
+            for (HtsRecordEntity e : allRecords) {
+                if (identityNo == null && e.getIdentityNo() != null) identityNo = e.getIdentityNo();
+                if (fullName == null && e.getFullName() != null) fullName = e.getFullName();
+                if (identityNo != null && fullName != null) break;
+            }
+
+            long totalCount = gsmMap.values().stream().mapToLong(List::size).sum();
+
+            list.add(CommonContactMultiShortDto.builder()
+                    .commonGsms(commonGsms)
+                    .gsm(entry.getKey())
+                    .identityNo(identityNo)
+                    .fullName(fullName)
+                    .totalCommunicationCount(totalCount)
+                    .build());
+        }
+
+        return CommonContactMultiResponse.builder()
+                .totalCommonCount(list.size())
+                .commonCommunications(list)
+                .build();
+    }
+
+    public List<MutualContactRecordDto> findMutualContacts(
+            List<String> gsmNumbers,
+            LocalDateTime startTime,
+            LocalDateTime endTime) {
+        if (gsmNumbers == null || gsmNumbers.size() < 2) {
+            return List.of();
+        }
+
+        List<String> normalizedGsms = gsmNumbers.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .distinct()
+                .toList();
+
+        List<HtsRecordEntity> records;
+        if (startTime != null && endTime != null) {
+            records = htsRecordQueryService.findAllByGsmNumbersAndOtherNumbersBetween(normalizedGsms, startTime, endTime);
+        } else if (startTime != null) {
+            records = htsRecordQueryService.findAllByGsmNumbersAndOtherNumbersAfter(normalizedGsms, startTime);
+        } else if (endTime != null) {
+            records = htsRecordQueryService.findAllByGsmNumbersAndOtherNumbersBefore(normalizedGsms, endTime);
+        } else {
+            records = htsRecordQueryService.findAllByGsmNumbersAndOtherNumbers(normalizedGsms);
+        }
+
+        Map<String, List<HtsRecordEntity>> byPair = records.stream()
+                .filter(r -> r.getOtherNumber() != null)
+                .filter(r -> !r.getGsmNumber().equals(r.getOtherNumber()))
+                .collect(Collectors.groupingBy(r -> pairKey(r.getGsmNumber(), r.getOtherNumber())));
+
+        List<MutualContactRecordDto> result = new ArrayList<>();
+
+        for (Map.Entry<String, List<HtsRecordEntity>> entry : byPair.entrySet()) {
+            Map<String, List<HtsRecordEntity>> byDirection = entry.getValue().stream()
+                    .collect(Collectors.groupingBy(r -> r.getGsmNumber() + "->" + r.getOtherNumber()));
+
+            List<HtsRecordEntity> selected = null;
+            for (List<HtsRecordEntity> list : byDirection.values()) {
+                if (selected == null) {
+                    selected = list;
+                } else if (list.size() > selected.size()) {
+                    selected = list;
+                }
+            }
+
+            if (selected != null) {
+                for (HtsRecordEntity r : selected) {
+                    result.add(MutualContactRecordDto.builder()
+                            .gsmNumber(r.getGsmNumber())
+                            .otherNumber(r.getOtherNumber())
+                            .recordType(r.getRecordType())
+                            .recordTime(r.getRecordDatetime())
+                            .baseStationInfo(buildBaseStationInfo(r))
+                            .build());
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private String pairKey(String a, String b) {
+        if (a == null || b == null) return "";
+        return a.compareTo(b) <= 0 ? a + "_" + b : b + "_" + a;
+    }
+
+    private String buildBaseStationInfo(HtsRecordEntity r) {
+        List<String> parts = new ArrayList<>();
+        if (r.getBaseStationId() != null && !r.getBaseStationId().isBlank()) parts.add(r.getBaseStationId());
+        if (r.getOperator() != null && !r.getOperator().isBlank()) parts.add(r.getOperator());
+        if (r.getAddress() != null && !r.getAddress().isBlank()) parts.add(r.getAddress());
+        if (r.getLatitude() != null) parts.add(String.valueOf(r.getLatitude()));
+        if (r.getLongitude() != null) parts.add(String.valueOf(r.getLongitude()));
+        return String.join(" - ", parts);
     }
 
     private Map<String, List<HtsRecordEntity>> groupByOtherNumber(List<HtsRecordEntity> records) {
