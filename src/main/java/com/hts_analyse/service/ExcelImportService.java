@@ -238,7 +238,7 @@ public class ExcelImportService {
         for (HtsRecordEntity entity : htsRecordEntities) {
             String gsm = entity.getGsmNumber();
             String imei = entity.getImei();
-            if (StringUtils.isBlank(gsm) || StringUtils.isBlank(imei)) {
+            if (StringUtils.isBlank(gsm) || StringUtils.isBlank(imei) || !imei.matches("\\d{14,15}")) {
                 continue;
             }
 

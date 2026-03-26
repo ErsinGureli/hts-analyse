@@ -191,8 +191,8 @@ public class ExcelReaderService {
                     // GSM boşsa skip
                     if (gsm.isBlank()) continue;
 
-                    // IMEI 15 hane kontrolü
-                    if (!imei.matches("\\d{15}")) continue;
+                    // IMEI 14/15 hane kontrolü
+                    if (!imei.matches("\\d{14,15}")) continue;
 
                     records.add(
                             GsmImeiDto.builder()

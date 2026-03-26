@@ -41,10 +41,10 @@ public class ImeiAnalyseService {
 
         List<Object[]> rows;
         if (startTime != null && endTime != null) {
-            rows = htsRecordQueryService.findDistinctGsmNumbersByImeiAndRecordTimeBetween(
+            rows = gsmImeiRepository.findDistinctGsmNumbersByImeiAndCreatedAtBetween(
                     normalizedGsms, startTime, endTime);
         } else {
-            rows = htsRecordQueryService.findDistinctGsmNumbersByImei(normalizedGsms);
+            rows = gsmImeiRepository.findDistinctGsmNumbersByImei(normalizedGsms);
         }
         Map<String, Set<String>> imeiToGsms = new HashMap<>();
 
@@ -91,7 +91,7 @@ public class ImeiAnalyseService {
         int insertedCount = 0;
 
         for (String imei : imeis) {
-            if (StringUtils.isBlank(imei) || !imei.matches("\\d{15}")) {
+            if (StringUtils.isBlank(imei) || !imei.matches("\\d{14,15}")) {
                 continue;
             }
             insertedCount += gsmImeiRepository.insertIgnore(gsmNumber, imei);

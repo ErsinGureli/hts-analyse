@@ -7,10 +7,12 @@ import lombok.*;
 @Entity
 @Table(name = "hts_record")
 @Data
+@EqualsAndHashCode(callSuper = true)
+@ToString(callSuper = true)
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class HtsRecordEntity {
+public class HtsRecordEntity extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

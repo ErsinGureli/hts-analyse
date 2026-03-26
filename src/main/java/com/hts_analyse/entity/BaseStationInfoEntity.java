@@ -6,10 +6,12 @@ import lombok.*;
 @Entity
 @Table(name = "base_station_info")
 @Data
+@EqualsAndHashCode(callSuper = true)
+@ToString(callSuper = true)
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class BaseStationInfoEntity {
+public class BaseStationInfoEntity extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
