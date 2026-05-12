@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
@@ -55,13 +56,19 @@ public class HtsAnalyseController {
 
     @GetMapping("/api/v1/hts/analyse/pairs")
     public ResponseEntity<HtsPairsResponse> analysePairs(
-            @RequestParam List<String> comparableGsmNumbers,
+            @RequestParam (required = false) List<String> gsmNumbers,
+            @RequestParam (required = false) String gsmNumbersCsv,
             @RequestParam(required = false, defaultValue = "60") int minute,
             @RequestParam(required = false, defaultValue = "1000") int distance,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDateTime startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDateTime endDate) {
+
+        if (StringUtils.isNoneBlank(gsmNumbersCsv)){
+            gsmNumbers = List.of(gsmNumbersCsv.split(","));
+        }
+
         return ResponseEntity.ok(
-                htsAnalyseService.analyseNetworkPairs(comparableGsmNumbers, minute, distance, startDate, endDate)
+                htsAnalyseService.analyseNetworkPairs(gsmNumbers, minute, distance, startDate, endDate)
         );
     }
 
@@ -132,9 +139,14 @@ public class HtsAnalyseController {
 
     @GetMapping("/common-contacts-as-excel-multi")
     public ResponseEntity<byte[]> downloadCommonContactsExcelMulti(
-            @RequestParam List<String> gsmNumbers,
+            @RequestParam (required = false) List<String> gsmNumbers,
+            @RequestParam (required = false) String gsmNumbersCsv,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
+
+        if (StringUtils.isNoneBlank(gsmNumbersCsv)){
+            gsmNumbers = List.of(gsmNumbersCsv.split(","));
+        }
 
         CommonContactMultiResponse response = htsAnalyseService.findCommonContactsMulti(gsmNumbers, startTime, endTime);
         byte[] excelBytes = commonContactExcelService.generateMultiExcel(response);
@@ -158,9 +170,14 @@ public class HtsAnalyseController {
 
     @GetMapping("/mutual-contacts-as-excel")
     public ResponseEntity<byte[]> downloadMutualContactsExcel(
-            @RequestParam List<String> gsmNumbers,
+            @RequestParam (required = false) List<String> gsmNumbers,
+            @RequestParam (required = false) String gsmNumbersCsv,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
+
+        if (StringUtils.isNoneBlank(gsmNumbersCsv)){
+            gsmNumbers = List.of(gsmNumbersCsv.split(","));
+        }
 
         List<MutualContactRecordDto> records = htsAnalyseService.findMutualContacts(gsmNumbers, startTime, endTime);
         byte[] excelBytes = commonContactExcelService.generateMutualContactsExcel(records);
