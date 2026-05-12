@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 public record HtsPairsResponse(
-        String baseGsmNumber,
-        List<GroupedResult> baseVsOthers,
-        Map<PairKey, List<GroupedResult>> othersPairs
+        List<String> gsmNumbers,
+        Map<PairKey, List<GroupedResult>> othersPairs,
+        List<MultiGsmGroupedResult> allGroups
 ) {}

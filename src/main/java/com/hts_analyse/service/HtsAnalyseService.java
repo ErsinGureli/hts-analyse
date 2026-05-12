@@ -15,6 +15,8 @@ import com.hts_analyse.model.dto.HtsRecordGroupedDto;
 import com.hts_analyse.model.dto.MutualContactRecordDto;
 import com.hts_analyse.model.dto.RecordTypeTimelineDto;
 import com.hts_analyse.model.record.HtsPairsResponse;
+import com.hts_analyse.model.record.MultiGsmEvent;
+import com.hts_analyse.model.record.MultiGsmGroupedResult;
 import com.hts_analyse.model.record.NearbyBazKey;
 import com.hts_analyse.model.record.PairKey;
 import com.hts_analyse.model.response.CommonContactMultiResponse;
@@ -28,6 +30,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -51,6 +54,13 @@ public class HtsAnalyseService {
 
     public List<GroupedResult> analyseDistance(String baseGsmNumber, List<String> compareGsmNumbers, int minute, int distance,
             LocalDateTime startDate, LocalDateTime endDate) {
+        return HtsAnalyseGrouper.groupByStationsAndDay(
+                analyseRawDistance(baseGsmNumber, compareGsmNumbers, minute, distance, startDate, endDate)
+        );
+    }
+
+    private List<HtsAnalyseDto> analyseRawDistance(String baseGsmNumber, List<String> compareGsmNumbers, int minute, int distance,
+            LocalDateTime startDate, LocalDateTime endDate) {
         List<HtsRecordEntity> recordEntities = findHtsRecordsByGsmNumber(baseGsmNumber, startDate, endDate);
 
         Map<Long, List<HtsRecordEntity>> recordsMap = new HashMap<>();
@@ -64,47 +74,37 @@ public class HtsAnalyseService {
             }
         }
 
-        List<HtsAnalyseDto> htsAnalyseDtoList = cretaeHtsAnalyseDtoList(recordsMap, recordEntities, distance);
-        return HtsAnalyseGrouper.groupByStationsAndDay(htsAnalyseDtoList);
+        return cretaeHtsAnalyseDtoList(recordsMap, recordEntities, distance);
     }
 
     public HtsPairsResponse analyseNetworkPairs(
-            String baseGsmNumber,
             List<String> comparableGsmNumbers,
             int minute,
             int distance,
             LocalDateTime startDate,
             LocalDateTime endDate
     ) {
-        // 1) base ↔ others (mevcut fonksiyonun reuse)
-        List<GroupedResult> baseVsOthers =
-                analyseDistance(baseGsmNumber, comparableGsmNumbers, minute, distance, startDate, endDate);
+        List<String> allGsmNumbers = buildAllGsmNumbers(comparableGsmNumbers);
 
-        // 2) others ↔ others (pair bazlı, duplicate yok)
         Map<PairKey, List<GroupedResult>> othersPairs = new LinkedHashMap<>();
+        Map<PairKey, List<HtsAnalyseDto>> pairMatches = new LinkedHashMap<>();
 
-        // İsteğe bağlı: aynı gsm tekrar gelmişse temizle (order korunur)
-        List<String> uniqueComparables = comparableGsmNumbers.stream()
-                .filter(StringUtils::isNotBlank)
-                .distinct()
-                .toList();
+        for (int i = 0; i < allGsmNumbers.size(); i++) {
+            for (int j = i + 1; j < allGsmNumbers.size(); j++) {
+                String a = allGsmNumbers.get(i);
+                String b = allGsmNumbers.get(j);
 
-        for (int i = 0; i < uniqueComparables.size(); i++) {
-            for (int j = i + 1; j < uniqueComparables.size(); j++) {
-                String a = uniqueComparables.get(i);
-                String b = uniqueComparables.get(j);
-
-                // sadece iki numara arasında analiz
-                List<GroupedResult> result =
-                        analyseDistance(a, List.of(b), minute, distance, startDate, endDate);
-
-                if (result != null && !result.isEmpty()) {
-                    othersPairs.put(new PairKey(a, b), result);
+                List<HtsAnalyseDto> rawMatches = analyseRawDistance(a, List.of(b), minute, distance, startDate, endDate);
+                if (!rawMatches.isEmpty()) {
+                    PairKey key = new PairKey(a, b);
+                    pairMatches.put(key, rawMatches);
+                    othersPairs.put(key, HtsAnalyseGrouper.groupByStationsAndDay(rawMatches));
                 }
             }
         }
 
-        return new HtsPairsResponse(baseGsmNumber, baseVsOthers, othersPairs);
+        List<MultiGsmGroupedResult> allGroups = buildMultiGsmGroups(pairMatches);
+        return new HtsPairsResponse(allGsmNumbers, othersPairs, allGroups);
     }
 
     public List<HtsRecordDto> findNearbyBazRecords(String address, List<String> gsmNumbers, int distance,
@@ -491,6 +491,188 @@ public class HtsAnalyseService {
         LocalDateTime startTime = recordTime.minusMinutes(minute);
         LocalDateTime endTime = recordTime.plusMinutes(minute);
         return htsRecordQueryService.findNearbyRecords(compareGsmNumbers, startTime, endTime, latitude, longitude, distance);
+    }
+
+    private List<String> buildAllGsmNumbers(List<String> comparableGsmNumbers) {
+        if (comparableGsmNumbers == null) {
+            return List.of();
+        }
+
+        return comparableGsmNumbers.stream()
+                .filter(StringUtils::isNotBlank)
+                .map(String::trim)
+                .distinct()
+                .toList();
+    }
+
+    private List<MultiGsmGroupedResult> buildMultiGsmGroups(Map<PairKey, List<HtsAnalyseDto>> pairMatches) {
+        if (pairMatches.isEmpty()) {
+            return List.of();
+        }
+
+        Map<EventNodeKey, Set<EventNodeKey>> graph = new LinkedHashMap<>();
+        Map<EventNodeKey, EventNodeData> nodes = new LinkedHashMap<>();
+
+        for (List<HtsAnalyseDto> matches : pairMatches.values()) {
+            for (HtsAnalyseDto dto : matches) {
+                EventNodeData baseNode = EventNodeData.fromBase(dto);
+                EventNodeData otherNode = EventNodeData.fromOther(dto);
+
+                nodes.putIfAbsent(baseNode.key(), baseNode);
+                nodes.putIfAbsent(otherNode.key(), otherNode);
+
+                graph.computeIfAbsent(baseNode.key(), key -> new LinkedHashSet<>()).add(otherNode.key());
+                graph.computeIfAbsent(otherNode.key(), key -> new LinkedHashSet<>()).add(baseNode.key());
+            }
+        }
+
+        Set<EventNodeKey> visited = new HashSet<>();
+        List<MultiGsmGroupedResult> groups = new ArrayList<>();
+
+        for (EventNodeKey startKey : nodes.keySet()) {
+            if (!visited.add(startKey)) {
+                continue;
+            }
+
+            List<EventNodeData> component = new ArrayList<>();
+            ArrayList<EventNodeKey> stack = new ArrayList<>();
+            stack.add(startKey);
+
+            while (!stack.isEmpty()) {
+                EventNodeKey current = stack.remove(stack.size() - 1);
+                component.add(nodes.get(current));
+
+                for (EventNodeKey neighbor : graph.getOrDefault(current, Set.of())) {
+                    if (visited.add(neighbor)) {
+                        stack.add(neighbor);
+                    }
+                }
+            }
+
+            MultiGsmGroupedResult group = toMultiGsmGroupedResult(component);
+            if (group != null) {
+                groups.add(group);
+            }
+        }
+
+        return groups.stream()
+                .sorted(Comparator
+                        .comparing(MultiGsmGroupedResult::gsmCount, Comparator.reverseOrder())
+                        .thenComparing(MultiGsmGroupedResult::firstSeen, Comparator.nullsLast(LocalDateTime::compareTo))
+                        .thenComparing(group -> String.join("_", group.gsmNumbers())))
+                .toList();
+    }
+
+    private MultiGsmGroupedResult toMultiGsmGroupedResult(List<EventNodeData> component) {
+        List<String> gsmNumbers = component.stream()
+                .map(EventNodeData::gsmNumber)
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .sorted()
+                .toList();
+
+        if (gsmNumbers.size() < 2) {
+            return null;
+        }
+
+        List<MultiGsmEvent> events = component.stream()
+                .sorted(Comparator
+                        .comparing(EventNodeData::recordTime, Comparator.nullsLast(LocalDateTime::compareTo))
+                        .thenComparing(EventNodeData::gsmNumber, Comparator.nullsLast(String::compareTo)))
+                .map(node -> MultiGsmEvent.builder()
+                        .gsmNumber(node.gsmNumber())
+                        .recordTime(node.recordTime())
+                        .address(node.address())
+                        .stationId(node.stationId())
+                        .latitude(node.latitude())
+                        .longitude(node.longitude())
+                        .build())
+                .toList();
+
+        Set<String> stationIds = component.stream()
+                .map(EventNodeData::stationId)
+                .filter(StringUtils::isNotBlank)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        Set<String> addresses = component.stream()
+                .map(EventNodeData::address)
+                .filter(StringUtils::isNotBlank)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        List<Double> latitudes = component.stream()
+                .map(EventNodeData::latitude)
+                .filter(Objects::nonNull)
+                .toList();
+
+        List<Double> longitudes = component.stream()
+                .map(EventNodeData::longitude)
+                .filter(Objects::nonNull)
+                .toList();
+
+        LocalDateTime firstSeen = component.stream()
+                .map(EventNodeData::recordTime)
+                .filter(Objects::nonNull)
+                .min(LocalDateTime::compareTo)
+                .orElse(null);
+
+        LocalDateTime lastSeen = component.stream()
+                .map(EventNodeData::recordTime)
+                .filter(Objects::nonNull)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+
+        return MultiGsmGroupedResult.builder()
+                .gsmNumbers(gsmNumbers)
+                .gsmCount(gsmNumbers.size())
+                .stationIds(stationIds)
+                .addresses(addresses)
+                .centerLatitude(latitudes.isEmpty() ? null : latitudes.stream().mapToDouble(Double::doubleValue).average().orElse(0.0))
+                .centerLongitude(longitudes.isEmpty() ? null : longitudes.stream().mapToDouble(Double::doubleValue).average().orElse(0.0))
+                .firstSeen(firstSeen)
+                .lastSeen(lastSeen)
+                .totalEvents(events.size())
+                .events(events)
+                .build();
+    }
+
+    private record EventNodeKey(String gsmNumber, LocalDateTime recordTime, long latitude, long longitude) {}
+
+    private record EventNodeData(
+            EventNodeKey key,
+            String gsmNumber,
+            LocalDateTime recordTime,
+            String address,
+            String stationId,
+            Double latitude,
+            Double longitude
+    ) {
+        private static EventNodeData fromBase(HtsAnalyseDto dto) {
+            return new EventNodeData(
+                    new EventNodeKey(dto.getBaseGsmNumber(), dto.getBaseGsmDateTime(), normalizeCoordinate(dto.getBaseLatitude()), normalizeCoordinate(dto.getBaseLongitude())),
+                    dto.getBaseGsmNumber(),
+                    dto.getBaseGsmDateTime(),
+                    dto.getBaseGsmAddress(),
+                    dto.getBaseStationId(),
+                    dto.getBaseLatitude(),
+                    dto.getBaseLongitude()
+            );
+        }
+
+        private static EventNodeData fromOther(HtsAnalyseDto dto) {
+            return new EventNodeData(
+                    new EventNodeKey(dto.getOtherGsmNumber(), dto.getOtherGsmDateTime(), normalizeCoordinate(dto.getOtherLatitude()), normalizeCoordinate(dto.getOtherLongitude())),
+                    dto.getOtherGsmNumber(),
+                    dto.getOtherGsmDateTime(),
+                    dto.getOtherGsmAddress(),
+                    dto.getOtherStationId(),
+                    dto.getOtherLatitude(),
+                    dto.getOtherLongitude()
+            );
+        }
+    }
+
+    private static long normalizeCoordinate(Double coordinate) {
+        return coordinate == null ? 0L : Math.round(coordinate * 100_000);
     }
 
     public List<Object[]> findLastNamesWithCount(String baseGsmNumber) {

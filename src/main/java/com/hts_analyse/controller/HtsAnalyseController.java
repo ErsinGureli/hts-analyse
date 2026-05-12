@@ -55,14 +55,13 @@ public class HtsAnalyseController {
 
     @GetMapping("/api/v1/hts/analyse/pairs")
     public ResponseEntity<HtsPairsResponse> analysePairs(
-            @RequestParam String baseGsmNumber,
             @RequestParam List<String> comparableGsmNumbers,
             @RequestParam(required = false, defaultValue = "60") int minute,
             @RequestParam(required = false, defaultValue = "1000") int distance,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDateTime startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDateTime endDate) {
         return ResponseEntity.ok(
-                htsAnalyseService.analyseNetworkPairs(baseGsmNumber, comparableGsmNumbers, minute, distance, startDate, endDate)
+                htsAnalyseService.analyseNetworkPairs(comparableGsmNumbers, minute, distance, startDate, endDate)
         );
     }
 
@@ -149,47 +148,6 @@ public class HtsAnalyseController {
         return ResponseEntity.ok().headers(headers).body(excelBytes);
     }
 
-    @GetMapping("/common-contacts-as-excel-multi_v2")
-    public ResponseEntity<byte[]> downloadCommonContactsExcelMulti2(
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
-
-        List<String> gsmNumbers = List.of(
-                "5071821966",
-                "5073563559",
-                "5302493501",
-                "5315702557",
-                "5318716780",
-                "5352529681",
-                "5386702667",
-                "5389844521",
-                "5422230617",
-                "5436263427",
-                "5447352323",
-                "5455025075",
-                "5510845003",
-                "5516495984",
-                "5516495985",
-                "5522517426",
-                "5525955555",
-                "5531621235",
-                "5537144537",
-                "5546746901",
-                "5547962415"
-        );
-
-        CommonContactMultiResponse response = htsAnalyseService.findCommonContactsMulti(gsmNumbers, startTime, endTime);
-        byte[] excelBytes = commonContactExcelService.generateMultiExcel(response);
-
-        String filename = "common_contacts.xlsx";
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
-        headers.setContentDisposition(ContentDisposition.attachment().filename(filename).build());
-
-        return ResponseEntity.ok().headers(headers).body(excelBytes);
-    }
-
     @GetMapping("/mutual-contacts")
     public ResponseEntity<List<MutualContactRecordDto>> getMutualContacts(
             @RequestParam List<String> gsmNumbers,
@@ -203,48 +161,6 @@ public class HtsAnalyseController {
             @RequestParam List<String> gsmNumbers,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
-
-        List<MutualContactRecordDto> records = htsAnalyseService.findMutualContacts(gsmNumbers, startTime, endTime);
-        byte[] excelBytes = commonContactExcelService.generateMutualContactsExcel(records);
-
-        String filename = "mutual_contacts.xlsx";
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
-        headers.setContentDisposition(ContentDisposition.attachment().filename(filename).build());
-
-        return ResponseEntity.ok().headers(headers).body(excelBytes);
-    }
-
-    @GetMapping("/mutual-contacts-as-excel_v2")
-    public ResponseEntity<byte[]> downloadMutualContactsExcel2(
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
-
-        List<String> gsmNumbers = List.of(
-                "5071821966",
-                "5073563559",
-                "5302493501",
-                "5315702557",
-                "5318716780",
-                "5352529681",
-                "5386702667",
-                "5389844521",
-                "5422230617",
-                "5436263427",
-                "5447352323",
-                "5455025075",
-                "5510845003",
-                "5516495984",
-                "5516495985",
-                "5522517426",
-                "5525955555",
-                "5531621235",
-                "5537144537",
-                "5546746901",
-                "5547962415"
-        );
-
 
         List<MutualContactRecordDto> records = htsAnalyseService.findMutualContacts(gsmNumbers, startTime, endTime);
         byte[] excelBytes = commonContactExcelService.generateMutualContactsExcel(records);
