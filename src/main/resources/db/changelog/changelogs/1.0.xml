@@ -117,4 +117,35 @@
     </addColumn>
   </changeSet>
 
+  <changeSet id="009-create-subscription-informations" author="ersin">
+    <createTable tableName="subscription_informations">
+      <column name="id" type="BIGSERIAL">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="order_no" type="VARCHAR(20)"/>
+      <column name="gsm_number" type="VARCHAR(20)"/>
+      <column name="status" type="VARCHAR(20)"/>
+      <column name="first_name" type="VARCHAR(100)"/>
+      <column name="last_name" type="VARCHAR(100)"/>
+      <column name="address" type="TEXT"/>
+      <column name="birth_date" type="VARCHAR(30)"/>
+      <column name="birth_place" type="VARCHAR(100)"/>
+      <column name="district" type="VARCHAR(100)"/>
+      <column name="city" type="VARCHAR(100)"/>
+      <column name="identity_no" type="VARCHAR(100)"/>
+      <column name="mother_name" type="VARCHAR(100)"/>
+      <column name="father_name" type="VARCHAR(100)"/>
+      <column name="subscription_query_range" type="VARCHAR(100)"/>
+      <column name="subscription_start_date" type="VARCHAR(30)"/>
+      <column name="subscription_end_date" type="VARCHAR(30)"/>
+      <column name="operator" type="VARCHAR(100)"/>
+      <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+      <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+  </changeSet>
+
 </databaseChangeLog>

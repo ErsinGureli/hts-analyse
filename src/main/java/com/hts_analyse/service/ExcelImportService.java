@@ -3,12 +3,16 @@ package com.hts_analyse.service;
 import com.hts_analyse.cache.BaseStationInfoCache;
 import com.hts_analyse.entity.BaseStationInfoEntity;
 import com.hts_analyse.entity.HtsRecordEntity;
+import com.hts_analyse.entity.SubscriptionInformationEntity;
 import com.hts_analyse.model.dto.BaseStationDto;
 import com.hts_analyse.model.dto.ExcelRecord;
+import com.hts_analyse.model.dto.FullExcelRecord;
 import com.hts_analyse.model.dto.GeocodingResult;
 import com.hts_analyse.model.dto.GsmImeiDto;
+import com.hts_analyse.model.dto.SubscriptionInformationRecord;
 import com.hts_analyse.model.record.BaseStationCandidate;
 import com.hts_analyse.repository.BaseStationInfoRepository;
+import com.hts_analyse.repository.SubscriptionInformationRepository;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -47,6 +51,7 @@ public class ExcelImportService {
     private final GeocodingService geocodingService;
     private final BaseStationInfoCache baseStationInfoCache;
     private final BaseStationInfoRepository baseStationInfoRepository;
+    private final SubscriptionInformationRepository subscriptionInformationRepository;
     private final JdbcTemplate jdbcTemplate;
     private final HtsBatchWriter htsBatchWriter;
     private final HtsRecordBuildHelper htsRecordBuildHelper;
@@ -77,7 +82,10 @@ public class ExcelImportService {
     }
 
     public void importExcel(String filePath, boolean shouldAnalyseHts, boolean shouldFilterHtsRecords) {
-        List<ExcelRecord> excelRecords = excelReaderService.readFullExcel(filePath);
+        FullExcelRecord fullExcelRecord = excelReaderService.readFullExcelData(filePath);
+        persistSubscriptionInformations(fullExcelRecord.getSubscriptionInformations());
+
+        List<ExcelRecord> excelRecords = fullExcelRecord.getHtsRecords();
         List<ExcelRecord> filteredExcelRecords =
                 shouldFilterHtsRecords ? filterUniquePerNDuration(excelRecords) : excelRecords;
 
@@ -92,6 +100,36 @@ public class ExcelImportService {
         persistHtsRecordsSingleThread(filteredExcelRecords, shouldAnalyseHts);
 
         log.info("geoLocationApiUsage : {}", geoLocationApiUsage.get());
+    }
+
+    private void persistSubscriptionInformations(List<SubscriptionInformationRecord> subscriptionInformations) {
+        if (subscriptionInformations == null || subscriptionInformations.isEmpty()) {
+            return;
+        }
+
+        List<SubscriptionInformationEntity> entities = subscriptionInformations.stream()
+                .map(record -> SubscriptionInformationEntity.builder()
+                        .orderNo(record.getOrderNo())
+                        .gsmNumber(record.getGsmNumber())
+                        .status(record.getStatus())
+                        .firstName(record.getFirstName())
+                        .lastName(record.getLastName())
+                        .address(record.getAddress())
+                        .birthDate(record.getBirthDate())
+                        .birthPlace(record.getBirthPlace())
+                        .district(record.getDistrict())
+                        .city(record.getCity())
+                        .identityNo(record.getIdentityNo())
+                        .motherName(record.getMotherName())
+                        .fatherName(record.getFatherName())
+                        .subscriptionQueryRange(record.getSubscriptionQueryRange())
+                        .subscriptionStartDate(record.getSubscriptionStartDate())
+                        .subscriptionEndDate(record.getSubscriptionEndDate())
+                        .operator(record.getOperator())
+                        .build())
+                .toList();
+
+        subscriptionInformationRepository.saveAll(entities);
     }
 
     private Map<String, String> collectGeocodeAddressCandidates(List<ExcelRecord> filteredExcelRecords) {

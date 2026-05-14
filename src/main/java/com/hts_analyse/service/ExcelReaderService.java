@@ -2,7 +2,9 @@ package com.hts_analyse.service;
 
 import com.hts_analyse.model.dto.BaseStationDto;
 import com.hts_analyse.model.dto.ExcelRecord;
+import com.hts_analyse.model.dto.FullExcelRecord;
 import com.hts_analyse.model.dto.GsmImeiDto;
+import com.hts_analyse.model.dto.SubscriptionInformationRecord;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +19,10 @@ import java.util.*;
 @Slf4j
 @Service
 public class ExcelReaderService {
+
+    private static final String GSM_SECTION = "GSM GÖRÜŞME SORGU SONUÇLARI";
+    private static final String GPRS_SECTION = "İNTERNET BAĞLANTI (GPRS) İLETİŞİM SORGU SONUÇLARI";
+    private static final String SUBSCRIPTION_INFORMATION_SECTION = "ABONE BİLGİLERİ";
 
     public List<ExcelRecord> readExcel(String filePath) {
         List<ExcelRecord> records = new ArrayList<>();
@@ -73,7 +79,12 @@ public class ExcelReaderService {
     }
 
     public List<ExcelRecord> readFullExcel(String filePath) {
+        return readFullExcelData(filePath).getHtsRecords();
+    }
+
+    public FullExcelRecord readFullExcelData(String filePath) {
         List<ExcelRecord> records = new ArrayList<>();
+        List<SubscriptionInformationRecord> subscriptionInformations = new ArrayList<>();
         IOUtils.setByteArrayMaxOverride(200_000_000);
 
         try (FileInputStream fis = new FileInputStream(filePath);
@@ -81,7 +92,9 @@ public class ExcelReaderService {
 
             Sheet sheet = workbook.getSheetAt(0);
             boolean insideRelevantSection = false;
-            Map<String, Integer> columnIndexMap = new HashMap<>();
+            boolean insideSubscriptionInformationSection = false;
+            Map<String, Integer> htsColumnIndexMap = new HashMap<>();
+            Map<String, Integer> subscriptionColumnIndexMap = new HashMap<>();
 
             for (Row row : sheet) {
                 Cell firstCellObj = row.getCell(0);
@@ -89,40 +102,90 @@ public class ExcelReaderService {
 
                 String firstCell = getCellValue(firstCellObj).trim().toUpperCase();
 
-                if (firstCell.equals("GSM GÖRÜŞME SORGU SONUÇLARI") ||
-                        firstCell.equals("İNTERNET BAĞLANTI (GPRS) İLETİŞİM SORGU SONUÇLARI")) {
-
+                if (firstCell.equals(GSM_SECTION) || firstCell.equals(GPRS_SECTION)) {
                     insideRelevantSection = true;
-                    columnIndexMap.clear(); // yeni tablo için reset
+                    insideSubscriptionInformationSection = false;
+                    htsColumnIndexMap.clear();
+                    continue;
+                }
+
+                if (firstCell.equals(SUBSCRIPTION_INFORMATION_SECTION)) {
+                    insideSubscriptionInformationSection = true;
+                    insideRelevantSection = false;
+                    subscriptionColumnIndexMap.clear();
                     continue;
                 }
 
                 if (firstCell.endsWith("SORGU SONUÇLARI")) {
                     insideRelevantSection = false;
+                    insideSubscriptionInformationSection = false;
+                    continue;
+                }
+
+                if (insideSubscriptionInformationSection) {
+                    if (subscriptionColumnIndexMap.isEmpty()) {
+                        for (Cell cell : row) {
+                            String header = getCellValue(cell).trim();
+                            subscriptionColumnIndexMap.put(header, cell.getColumnIndex());
+                        }
+                        continue;
+                    }
+
+                    try {
+                        if (isRowEmpty(row)) continue;
+
+                        SubscriptionInformationRecord record = SubscriptionInformationRecord.builder()
+                                .orderNo(getValue(subscriptionColumnIndexMap, row, "SIRA NO"))
+                                .gsmNumber(getValue(subscriptionColumnIndexMap, row, "NUMARA"))
+                                .status(getValue(subscriptionColumnIndexMap, row, "DURUM"))
+                                .firstName(getValue(subscriptionColumnIndexMap, row, "AD"))
+                                .lastName(getValue(subscriptionColumnIndexMap, row, "SOYAD"))
+                                .address(getValue(subscriptionColumnIndexMap, row, "ADRES"))
+                                .birthDate(getValue(subscriptionColumnIndexMap, row, "DOGUM TARİHİ"))
+                                .birthPlace(getValue(subscriptionColumnIndexMap, row, "DOGUM YERİ"))
+                                .district(getValue(subscriptionColumnIndexMap, row, "İLÇE"))
+                                .city(getValue(subscriptionColumnIndexMap, row, "İL"))
+                                .identityNo(getValue(subscriptionColumnIndexMap, row, "TC KİMLİK NO"))
+                                .motherName(getValue(subscriptionColumnIndexMap, row, "ANNE ADI"))
+                                .fatherName(getValue(subscriptionColumnIndexMap, row, "BABA ADI"))
+                                .subscriptionQueryRange(getValue(subscriptionColumnIndexMap, row, "ABONE SORGU ARALIĞI"))
+                                .subscriptionStartDate(getValue(subscriptionColumnIndexMap, row, "ABONE BASLANGIÇ"))
+                                .subscriptionEndDate(getValue(subscriptionColumnIndexMap, row, "ABONE BİTİŞ"))
+                                .operator(getValue(subscriptionColumnIndexMap, row, "OPERATÖR"))
+                                .build();
+
+                        if (record.getGsmNumber().isBlank()) continue;
+
+                        subscriptionInformations.add(record);
+                    } catch (Exception e) {
+                        log.warn("Abone bilgisi satırı okunamadı, atlanıyor. Hata: {}", e.getMessage());
+                    }
+
                     continue;
                 }
 
                 if (!insideRelevantSection) continue;
 
-                // HEADER SATIRI
-                if (columnIndexMap.isEmpty()) {
+                if (htsColumnIndexMap.isEmpty()) {
                     for (Cell cell : row) {
                         String header = getCellValue(cell).trim();
-                        columnIndexMap.put(header, cell.getColumnIndex());
+                        htsColumnIndexMap.put(header, cell.getColumnIndex());
                     }
                     continue;
                 }
 
                 try {
+                    if (isRowEmpty(row)) continue;
+
                     ExcelRecord excelRecord = ExcelRecord.builder()
-                            .gsmNumber(getValue(columnIndexMap, row, "NUMARA"))
-                            .recordType(getValue(columnIndexMap, row, "TİP"))
-                            .otherNumber(getValue(columnIndexMap, row, "DİĞER NUMARA"))
-                            .recordTime(getValue(columnIndexMap, row, "TARİH"))
-                            .fullName(getValue(columnIndexMap, row, "İSİM SOYİSİM ( DİĞER NUMARA)"))
-                            .identityNo(getValue(columnIndexMap, row, "TC KİMLİK NO (DİĞER NUMARA)"))
-                            .imei(getValue(columnIndexMap, row, "IMEI"))
-                            .baseStation(parseBaseStation(getValue(columnIndexMap, row, "BAZ (NUMARA)")))
+                            .gsmNumber(getValue(htsColumnIndexMap, row, "NUMARA"))
+                            .recordType(getValue(htsColumnIndexMap, row, "TİP"))
+                            .otherNumber(getValue(htsColumnIndexMap, row, "DİĞER NUMARA"))
+                            .recordTime(getValue(htsColumnIndexMap, row, "TARİH"))
+                            .fullName(getValue(htsColumnIndexMap, row, "İSİM SOYİSİM ( DİĞER NUMARA)"))
+                            .identityNo(getValue(htsColumnIndexMap, row, "TC KİMLİK NO (DİĞER NUMARA)"))
+                            .imei(getValue(htsColumnIndexMap, row, "IMEI"))
+                            .baseStation(parseBaseStation(getValue(htsColumnIndexMap, row, "BAZ (NUMARA)")))
                             .build();
 
                     records.add(excelRecord);
@@ -135,7 +198,10 @@ public class ExcelReaderService {
             throw new RuntimeException("Failed to read Excel file: " + filePath, e);
         }
 
-        return records;
+        return FullExcelRecord.builder()
+                .htsRecords(records)
+                .subscriptionInformations(subscriptionInformations)
+                .build();
     }
 
     // ----------------------------------------------------
@@ -237,6 +303,17 @@ public class ExcelReaderService {
             }
         }
         return null;
+    }
+
+    private boolean isRowEmpty(Row row) {
+        if (row == null) return true;
+
+        for (Cell cell : row) {
+            if (!getCellValue(cell).isBlank()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
